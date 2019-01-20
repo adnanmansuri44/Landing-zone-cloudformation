@@ -123,4 +123,5 @@ Resources:
             Tags: 
             -   Key: "Name"
                 Value: "deletevpc"
-            UserData: "IyEvYmluL2Jhc2gKeXVtIGluc3RhbGwgZ2l0IGpxIC15CmdpdCBjbG9uZSBodHRwczovL2dpdGh1Yi5jb20vYWRuYW5tYW5zdXJpNDQvcmVtb3ZlLWRlZmF1bHQtdnBjLmdpdApzaCByZW1vdmUtZGVmYXVsdC12cGMvcmVtb3ZlX3ZwYy5zaA=="
+            #UserData: "IyEvYmluL2Jhc2gKeXVtIGluc3RhbGwgZ2l0IGpxIC15CmdpdCBjbG9uZSBodHRwczovL2dpdGh1Yi5jb20vYWRuYW5tYW5zdXJpNDQvcmVtb3ZlLWRlZmF1bHQtdnBjLmdpdApzaCByZW1vdmUtZGVmYXVsdC12cGMvcmVtb3ZlX3ZwYy5zaA=="
+            UserData: "IyEvYmluL2Jhc2gKeXVtIGluc3RhbGwgZ2l0IGpxIC15CmdpdCBjbG9uZSBodHRwczovL2dpdGh1Yi5jb20vYWRuYW5tYW5zdXJpNDQvcmVtb3ZlLWRlZmF1bHQtdnBjLmdpdApzaCByZW1vdmUtZGVmYXVsdC12cGMvcmVtb3ZlX3ZwYy5zaAphd3MgaWFtICB1cGRhdGUtYWNjb3VudC1wYXNzd29yZC1wb2xpY3kgLS1taW5pbXVtLXBhc3N3b3JkLWxlbmd0aCAxNCAtLXJlcXVpcmUtc3ltYm9scyAtLXJlcXVpcmUtbnVtYmVycyAtLXJlcXVpcmUtdXBwZXJjYXNlLWNoYXJhY3RlcnMgLS1yZXF1aXJlLWxvd2VyY2FzZS1jaGFyYWN0ZXJzIC0tYWxsb3ctdXNlcnMtdG8tY2hhbmdlLXBhc3N3b3JkIC0tbWF4LXBhc3N3b3JkLWFnZSA2MCAtLXBhc3N3b3JkLXJldXNlLXByZXZlbnRpb24gMyAtLW5vLWhhcmQtZXhwaXJ5"
