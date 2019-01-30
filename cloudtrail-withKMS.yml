@@ -30,7 +30,11 @@ Parameters:
   CloudtrailName:
     Description: 'Name of Cloudtrail'
     Type: String
-    Default: ''
+    Default: 'Master-Trail-DO_NOT_MODIFY'
+    MinLength: '0'
+    MaxLength: '64'
+    AllowedPattern: "^(|[|\\w=,.@-]+)$"
+    ConstraintDescription: "The role name must contain only upper and lowercase alphanumeric characters with no spaces. These characters are alllowed: = , . @ -" 
   CloudWatchLogsRetentionInDays:
     Description: 'The number of days log events are kept in CloudWatch Logs'
     Type: Number
@@ -43,7 +47,11 @@ Parameters:
   CloudwatchLogGroupName:
     Description: 'Optional Name of Cloudwatch Log Group'
     Type: String
-    Default: ''
+    Default: 'CloudTrail/DefaultLogGroup'
+    MinLength: '0'
+    MaxLength: '512'
+    AllowedPattern: "[\\w-/.]+"
+    ConstraintDescription: "Log group names can be between 1 and 512 characters long. Allowed characters include a-z, A-Z, 0-9, '_' (underscore), '-' (hyphen), '/' (forward slash), and '.' (period)."
   LogFilePrefix:
     Description: 'Optional The log file prefix.'
     Type: String
@@ -276,3 +284,6 @@ Outputs:
   SNSTopicname:
     Description: 'Name of SNS created for Cloudtrail events'
     Value: !GetAtt 'TrailTopic.TopicName'
+  CloudtrailName:
+    Description: 'Name of Cloudtrail created by stack'
+    Value: !Ref CloudtrailName
