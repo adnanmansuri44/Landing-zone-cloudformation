@@ -187,9 +187,29 @@ Resources:
             - 'logs:CreateLogStream'
             - 'logs:PutLogEvents'
             Resource: !GetAtt 'TrailLogGroup.Arn'
+  TrailTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+        DisplayName: trail-SNS
+        TopicName: Notify-cloudtrail-event-notification
+  TrailTopicPolicy:
+    Type: 'AWS::SNS::TopicPolicy'
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: AWSCloudTrailSNSPolicy
+          Effect: Allow
+          Principal:
+            Service: 'cloudtrail.amazonaws.com'
+          Resource: !Ref TrailTopic
+          Action: 'sns:Publish'
+      Topics:
+      - !Ref TrailTopic
   Trail:
     Condition: InternalBucket
     DependsOn:
+    - TrailTopicPolicy
     - TrailBucketPolicy
     - myKMSKey
     Type: 'AWS::CloudTrail::Trail'
@@ -217,9 +237,11 @@ Resources:
       S3KeyPrefix: !Ref LogFilePrefix
       CloudWatchLogsLogGroupArn: !GetAtt 'TrailLogGroup.Arn'
       CloudWatchLogsRoleArn: !GetAtt 'TrailLogGroupRole.Arn'
+      SnsTopicName: !GetAtt 'TrailTopic.TopicName'
   ExternalTrail:
     Condition: ExternalBucket
     DependsOn:
+    - TrailTopicPolicy
     - myKMSKey
     Type: 'AWS::CloudTrail::Trail'
     Properties:
@@ -246,13 +268,11 @@ Resources:
       S3KeyPrefix: !Ref LogFilePrefix
       CloudWatchLogsLogGroupArn: !GetAtt 'TrailLogGroup.Arn'
       CloudWatchLogsRoleArn: !GetAtt 'TrailLogGroupRole.Arn'
+      SnsTopicName: !GetAtt 'TrailTopic.TopicName'
 Outputs:
-  TemplateID:
-    Description: 'cloudonaut.io template id.'
-    Value: 'security/cloudtrail'
-  TemplateVersion:
-    Description: 'cloudonaut.io template version.'
-    Value: '__VERSION__'
   StackName:
     Description: 'Stack name.'
     Value: !Sub '${AWS::StackName}'
+  SNSTopicname:
+    Description: 'Name of SNS created for Cloudtrail events'
+    Value: !GetAtt 'TrailTopic.TopicName'
