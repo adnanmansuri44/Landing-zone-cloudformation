@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: Enable AWS Config test by stackset required execution and admin role 
+Description: Enable AWS Config test by stackset required execution and admin role   
 Parameters:
   s3bucketname:
     Type: String
@@ -43,7 +43,7 @@ Resources:
     Type: AWS::Config::ConfigurationRecorder
     Properties:
       Name: myconfigservice-recorder
-      RoleARN: !GetAtt ConfigRecorderRole.Arn
+      RoleARN: !Ref ConfigserviceIAMroleARN
       RecordingGroup:
         AllSupported: true
         IncludeGlobalResourceTypes: true

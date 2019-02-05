@@ -90,7 +90,7 @@ Resources:
           Action:
           - sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/aws-service-role/AWSConfigServiceRolePolicy
+        - arn:aws:iam::aws:policy/service-role/AWSConfigRole
       Policies:
       - PolicyName: CIS-configservice-policy
         PolicyDocument:
