@@ -1,0 +1,57 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Enable AWS Config test by stackset required execution and admin role 
+Parameters:
+  s3bucketname:
+    Type: String
+    Description: Name of s3 bucket which created by prerequisite stack.
+  ConfigserviceIAMroleARN:
+    Type: String
+    Description: Enter Config Service IAM Role Arn which created by prerequisite stack. 
+  Frequency:
+    Type: String
+    Default: Six_Hours
+    Description: The frequency with which AWS Config delivers configuration snapshots.
+    AllowedValues:
+      - One_Hour
+      - Three_Hours
+      - Six_Hours
+      - Twelve_Hours
+      - TwentyFour_Hours
+Resources:
+  ConfigTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: configservice-topic
+      DisplayName: AWS Config Notification Topic
+
+  ConfigTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref ConfigTopic
+      PolicyDocument:
+        Statement:
+          - Sid: AWSConfigSNSPolicy
+            Action:
+              - sns:Publish
+            Effect: Allow
+            Resource: !Ref ConfigTopic
+            Principal:
+              Service:
+                - config.amazonaws.com
+  ConfigRecorder:
+    Type: AWS::Config::ConfigurationRecorder
+    Properties:
+      Name: myconfigservice-recorder
+      RoleARN: !GetAtt ConfigRecorderRole.Arn
+      RecordingGroup:
+        AllSupported: true
+        IncludeGlobalResourceTypes: true
+  ConfigDeliveryChannel:
+    Type: AWS::Config::DeliveryChannel
+    Properties:
+      Name: myconfigservice-deliverychannel
+      ConfigSnapshotDeliveryProperties:
+        DeliveryFrequency: !Ref Frequency
+      S3BucketName: !Ref s3bucketname
+      SnsTopicARN: !Ref ConfigTopic

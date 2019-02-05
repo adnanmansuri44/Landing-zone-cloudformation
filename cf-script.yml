@@ -1,6 +1,5 @@
-AWSTemplateFormatVersion: "2010-09-09"
-Metadata:
-    Generator: "This Cloudformation will delete VPC and update IAM password policy"
+---
+AWSTemplateFormatVersion: 2010-09-09
 Description: "This Cloudformation will delete VPC and update IAM password policy"
 Mappings:
     AWSRegionAMIEC2:

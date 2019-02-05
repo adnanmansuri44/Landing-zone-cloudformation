@@ -1,0 +1,146 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create global resources for Config service enable in all region
+Resources:
+  ConfigBucket:
+    #DeletionPolicy: Retain
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "configservice-bucket-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+  ConfigBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ConfigBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AWSConfigBucketPermissionsCheck
+            Effect: Allow
+            Principal:
+              Service:
+                - config.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource:
+              - !Sub "arn:aws:s3:::${ConfigBucket}"
+          - Sid: AWSConfigBucketDelivery
+            Effect: Allow
+            Principal:
+              Service:
+                - config.amazonaws.com
+            Action: s3:PutObject
+            Resource:
+              - !Sub "arn:aws:s3:::${ConfigBucket}/AWSLogs/${AWS::AccountId}/*"
+  IAMexecutionrole:
+    DependsOn:
+    - IAMAdminrole
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AWSCloudFormationStackSetExecutionRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: 
+                AWS:
+                - !Join ['', ['arn:aws:iam::', !Ref 'AWS::AccountId',':role/AWSCloudFormationStackSetAdministrationRole']]
+            Action:
+            - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess  
+  IAMAdminrole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AWSCloudFormationStackSetAdministrationRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: 
+              Service:
+                - cloudformation.amazonaws.com
+            Action:
+              - sts:AssumeRole    
+      Policies: 
+        - 
+          PolicyName: 'sts-assume-for-stack-admin'
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+              - 
+                Effect: "Allow"
+                Action:
+                  - sts:AssumeRole
+                Resource: '!Sub arn:aws:iam::${AWS::AccountId}:role/AWSCloudFormationStackSetExecutionRole'
+  ConfigServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AWSConfigServiceRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - config.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/aws-service-role/AWSConfigServiceRolePolicy
+      Policies:
+      - PolicyName: CIS-configservice-policy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Sid: AWSConfigRole
+            Effect: Allow
+            Action:
+            - config:Put*
+            Resource: '*'
+          - Sid: AWSCloudTrailConfig
+            Effect: Allow
+            Action:
+            - cloudtrail:List*
+            - cloudtrail:Desc*
+            - cloudtrail:Look*
+            - cloudtrail:Get*
+            Resource: '*'
+          - Sid: AWSConfigPutObject
+            Effect: Allow
+            Action: s3:PutObject
+            Resource:
+            - !Sub 'arn:aws:s3:::${ConfigBucket}/AWSLogs/${AWS::AccountId}/*'
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+          - Sid: AWSConfigGetObject
+            Effect: Allow
+            Action: s3:GetBucketAcl
+            Resource:
+            - !Sub 'arn:aws:s3:::${ConfigBucket}'
+Outputs: 
+  SecurityGroup: 
+    Description: "S3 Bucket Name"
+    Value: !Ref ConfigBucket
+    Export: 
+      Name: !Sub "${AWS::StackName}-BUCKETNAME"
+  ConfigIAMRole:
+    Description: "IAM Role for configservice"
+    Value: !GetAtt ConfigServiceRole.Arn
+    Export: 
+      Name: !Sub "${AWS::StackName}-CONFIGROLEARN"
+  AdminIAMRole:
+    Description: "IAM Role for Administrator"
+    Value: !Ref IAMAdminrole
+    Export: 
+      Name: !Sub "${AWS::StackName}-ADMINROLENAME"
+  ExecutionIAMRole:
+    Description: "IAM Role for Execution"
+    Value: !Ref IAMexecutionrole
+    Export: 
+      Name: !Sub "${AWS::StackName}-EXECUTIONROLENAME"
+...
