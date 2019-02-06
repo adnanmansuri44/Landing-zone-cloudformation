@@ -1,0 +1,126 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: "This Cloudformation will delete VPC and update IAM password policy"
+Mappings:
+    AWSRegionAMIEC2:
+        ap-northeast-1:
+            AMZLN: ami-00a5245b4816c38e6
+        ap-northeast-2:
+            AMZLN: ami-00dc207f8ba6dc919
+        ap-southeast-1:
+            AMZLN: ami-05b3bcf7f311194b3
+        ap-southeast-2:
+            AMZLN: ami-02fd0b06f06d93dfc
+        ap-south-1:
+            AMZLN: ami-0ad42f4f66f6c1cc9
+        ca-central-1:
+            AMZLN: ami-07423fb63ea0a0930
+        eu-central-1:
+            AMZLN: ami-0cfbf4f6db41068ac
+        eu-north-1:
+            AMZLN: ami-86fe70f8
+        eu-west-1:
+            AMZLN: ami-08935252a36e25f85
+        eu-west-2:
+            AMZLN: ami-01419b804382064e4
+        eu-west-3:
+            AMZLN: ami-0dd7e7ed60da8fb83
+        sa-east-1:
+            AMZLN: ami-05145e0b28ad8e0b2
+        us-east-1:
+            AMZLN: ami-0080e4c5bc078760e
+        us-east-2:
+            AMZLN: ami-0cd3dfa4e37921605
+        us-west-1:
+            AMZLN: ami-0ec6517f6edbf8044
+        us-west-2:
+            AMZLN: ami-01e24be29428c15b2
+Resources:
+    demovpc:
+        Type: "AWS::EC2::VPC"
+        Properties:
+            CidrBlock: "10.0.0.0/16"
+            EnableDnsSupport: true
+            EnableDnsHostnames: true
+            Tags: 
+              - 
+                Key: "Name"
+                Value: "demo-vpc"
+
+    publicroutetable:
+        Type: "AWS::EC2::RouteTable"
+        Properties:
+            VpcId: !Ref demovpc
+
+    publicsubnet:
+        Type: "AWS::EC2::Subnet"
+        Properties:
+            VpcId: !Ref demovpc
+            CidrBlock: "10.0.0.0/24"
+            MapPublicIpOnLaunch: true
+            AvailabilityZone: !Select [ 0, !GetAZs '' ]
+
+    subnetroutetableattach:
+        Type: "AWS::EC2::SubnetRouteTableAssociation"
+        Properties:
+            SubnetId: !Ref publicsubnet
+            RouteTableId: !Ref publicroutetable
+
+    myinternetgateway:
+        Type: "AWS::EC2::InternetGateway"
+        
+    InternetGatewayAttachment:
+        Type: AWS::EC2::VPCGatewayAttachment
+        Properties:
+            InternetGatewayId: !Ref myinternetgateway
+            VpcId: !Ref demovpc
+
+    addroute:
+        Type: "AWS::EC2::Route"
+        DependsOn: InternetGatewayAttachment
+        Properties:
+            RouteTableId: !Ref publicroutetable
+            DestinationCidrBlock: "0.0.0.0/0"
+            GatewayId: !Ref myinternetgateway
+
+    iam6e6cd98:
+        Type: "AWS::IAM::Role"
+        Properties:
+            AssumeRolePolicyDocument: 
+                Version: "2012-10-17"
+                Statement: 
+                  - 
+                    Effect: "Allow"
+                    Action: 
+                      - "sts:AssumeRole"
+                    Principal: 
+                        Service: 
+                          - "ec2.amazonaws.com"
+            Path: '/managed/'
+            ManagedPolicyArns:
+                - arn:aws:iam::aws:policy/AdministratorAccess
+                  
+    iamb15974e:
+        Type: "AWS::IAM::InstanceProfile"
+        Properties:
+            InstanceProfileName: "Vpcfullaccess"
+            Roles:
+                - Ref: iam6e6cd98
+
+    myec2instance:
+        Type: "AWS::EC2::Instance"
+        Properties:
+            #ImageId: "ami-0080e4c5bc078760e"
+            ImageId: !FindInMap 
+                - AWSRegionAMIEC2
+                - !Ref 'AWS::Region'
+                - AMZLN
+            InstanceType: "t2.micro"
+            IamInstanceProfile: !Ref iamb15974e
+            SubnetId: 
+                Ref: publicsubnet
+            Tags: 
+            -   Key: "Name"
+                Value: "deletevpc"
+            #UserData: "IyEvYmluL2Jhc2gKeXVtIGluc3RhbGwgZ2l0IGpxIC15CmdpdCBjbG9uZSBodHRwczovL2dpdGh1Yi5jb20vYWRuYW5tYW5zdXJpNDQvcmVtb3ZlLWRlZmF1bHQtdnBjLmdpdApzaCByZW1vdmUtZGVmYXVsdC12cGMvcmVtb3ZlX3ZwYy5zaA=="
+            UserData: "IyEvYmluL2Jhc2gKeXVtIGluc3RhbGwgZ2l0IGpxIC15CmdpdCBjbG9uZSBodHRwczovL2dpdGh1Yi5jb20vYWRuYW5tYW5zdXJpNDQvcmVtb3ZlLWRlZmF1bHQtdnBjLmdpdApzaCByZW1vdmUtZGVmYXVsdC12cGMvcmVtb3ZlX3ZwYy5zaAphd3MgaWFtICB1cGRhdGUtYWNjb3VudC1wYXNzd29yZC1wb2xpY3kgLS1taW5pbXVtLXBhc3N3b3JkLWxlbmd0aCAxNCAtLXJlcXVpcmUtc3ltYm9scyAtLXJlcXVpcmUtbnVtYmVycyAtLXJlcXVpcmUtdXBwZXJjYXNlLWNoYXJhY3RlcnMgLS1yZXF1aXJlLWxvd2VyY2FzZS1jaGFyYWN0ZXJzIC0tYWxsb3ctdXNlcnMtdG8tY2hhbmdlLXBhc3N3b3JkIC0tbWF4LXBhc3N3b3JkLWFnZSA2MCAtLXBhc3N3b3JkLXJldXNlLXByZXZlbnRpb24gMyAtLW5vLWhhcmQtZXhwaXJ5"
