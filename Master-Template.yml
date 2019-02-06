@@ -32,18 +32,18 @@ Parameters:
     MinLength: '0'
     MaxLength: '64'
     AllowedPattern: "^(|[|\\w=,.@-]+)$"
-    ConstraintDescription: "The role name must contain only upper and lowercase alphanumeric characters with no spaces. These characters are alllowed: = , . @ -" 
+    ConstraintDescription: "'Optional'The role name must contain only upper and lowercase alphanumeric characters with no spaces. These characters are alllowed: = , . @ -" 
   CloudWatchLogsRetentionInDays:
-    Description: 'The number of days log events are kept in CloudWatch Logs'
+    Description: '"Optional" The number of days log events are kept in CloudWatch Logs'
     Type: Number
     Default: 14
     AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653]
   ExternalTrailBucket:
-    Description: 'Optional The name of the Amazon S3 bucket where CloudTrail publishes log files. If you leave this empty, the Amazon S3 bucket is created for you.'
+    Description: '"Optional" The name of the Amazon S3 bucket where CloudTrail publishes log files. If you leave this empty, the Amazon S3 bucket is created for you.'
     Type: String
     Default: ''
   CloudwatchLogGroupName:
-    Description: 'Optional Name of Cloudwatch Log Group'
+    Description: '"Optional" Name of Cloudwatch Log Group'
     Type: String
     Default: 'CloudTrail/DefaultLogGroup'
     MinLength: '0'
@@ -51,23 +51,23 @@ Parameters:
     AllowedPattern: "[\\w-/.]+"
     ConstraintDescription: "Log group names can be between 1 and 512 characters long. Allowed characters include a-z, A-Z, 0-9, '_' (underscore), '-' (hyphen), '/' (forward slash), and '.' (period)."
   LogFilePrefix:
-    Description: 'Optional The log file prefix.'
+    Description: '"Optional" The log file prefix.'
     Type: String
     Default: ''
   PrimaryEmailCloudwatchalarm:
     Type: String
     AllowedPattern: ".+@.+"
     Default: 'example@example.com'
-    Description: Triggered alarms will alert to this email address. Verification required and you can opt-out later. Make sure to validate otherwise you won't be able to delete the subscription and have to wait 3 days for automatic deletion.
+    Description: "'Required'Triggered alarms will alert to this email address. Verification required and you can opt-out later. Make sure to validate otherwise you won't be able to delete the subscription and have to wait 3 days for automatic deletion."
   SecondaryEmailCloudwatchalarm:
     Type: String
     Description: 'Optional Secondary Email id.'
     AllowedPattern: ".+@.+"
     Default: 'example2@example.com'
-    Description: Triggered alarms will alert to this email address. Verification required and you can opt-out later. Make sure to validate otherwise you won't be able to delete the subscription and have to wait 3 days for automatic deletion.  
+    Description: "'Optional'Triggered alarms will alert to this email address. Verification required and you can opt-out later. Make sure to validate otherwise you won't be able to delete the subscription and have to wait 3 days for automatic deletion."
   GuardDutyfindingPublish:
     Type: String
-    Description: Enter the Finding Publish Frequency Value.
+    Description: "'Optional' Enter the Finding Publish Frequency Value."
     Default: FIFTEEN_MINUTES
     AllowedValues:
       - FIFTEEN_MINUTES
@@ -81,7 +81,7 @@ Parameters:
   DeliveryFrequency:
     Type: String
     Default: Six_Hours
-    Description: The frequency with which AWS Config delivers configuration snapshots.
+    Description: "'Optional' The frequency with which AWS Config delivers configuration snapshots."
     AllowedValues:
       - One_Hour
       - Three_Hours
