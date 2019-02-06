@@ -38,7 +38,7 @@ Resources:
       TopicName: GuardDuty-findings-Topic
       DisplayName: AWS Guardduty Notification Topic
       Subscription: []
-  SNSTopicPolicy:
+  GuardDutyTopicPolicy:
     Properties:
       PolicyDocument:
         Statement:

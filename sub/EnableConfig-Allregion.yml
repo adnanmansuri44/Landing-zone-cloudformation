@@ -1,13 +1,13 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: Enable AWS Config test by stackset required execution and admin role   
+Description: Enable AWS Config Service by StackSet required execution and admin role   
 Parameters:
   s3bucketname:
     Type: String
-    Description: Name of s3 bucket which created by prerequisite stack.
+    Description: Name of s3 bucket which created by Master stack.
   ConfigserviceIAMroleARN:
     Type: String
-    Description: Enter Config Service IAM Role Arn which created by prerequisite stack. 
-  Frequency:
+    Description: Enter Config Service IAM Role Arn which created by Master stack. 
+  DeliveryFrequency:
     Type: String
     Default: Six_Hours
     Description: The frequency with which AWS Config delivers configuration snapshots.
@@ -17,20 +17,19 @@ Parameters:
       - Six_Hours
       - Twelve_Hours
       - TwentyFour_Hours
-  PrimaryEmail:
+  PrimaryEmailConfigservice:
     Type: String
     AllowedPattern: ".+@.+"
     Default: 'example@example.com'
     Description: "'Optional' Enter the email address you want to notify  stream change and notifications. ' this can cause a high volume of email.'"
 Conditions:
-    Subcription: !Not [!Equals [!Ref PrimaryEmail, 'example@example.com']]
+    ConfigSubcription: !Not [!Equals [!Ref PrimaryEmailConfigservice, 'example@example.com']]
 Resources:
   ConfigTopic:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: configservice-topic
       DisplayName: AWS Config Notification Topic
-
   ConfigTopicPolicy:
     Type: AWS::SNS::TopicPolicy
     Properties:
@@ -50,7 +49,7 @@ Resources:
     Condition: Subcription
     Type: AWS::SNS::Subscription
     Properties:
-        Endpoint: !Ref PrimaryEmail
+        Endpoint: !Ref PrimaryEmailConfigservice
         Protocol: email
         TopicArn: !Ref 'ConfigTopic'
   ConfigRecorder:
@@ -66,7 +65,7 @@ Resources:
     Properties:
       Name: myconfigservice-deliverychannel
       ConfigSnapshotDeliveryProperties:
-        DeliveryFrequency: !Ref Frequency
+        DeliveryFrequency: !Ref DeliveryFrequency
       S3BucketName: !Ref s3bucketname
       SnsTopicARN: !Ref ConfigTopic
 Outputs:

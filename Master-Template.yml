@@ -1,6 +1,6 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Security: CloudTrail across all regions with KMS s3 bucket, cloudwatch log and alarms, Guardduty enable with nitification event and config service with sns'
+Description: 'Security: CloudTrail across all regions with KMS s3 bucket, cloudwatch log and alarms, Guardduty enable with notification event and config service with sns'
 Metadata:
   'AWS::CloudFormation::Interface':
     ParameterGroups:
@@ -15,10 +15,15 @@ Metadata:
       - PrimaryEmailCloudwatchalarm
       - SecondaryEmailCloudwatchalarm
     - Label:
-        default: 'Guardduty Parameters'
+        default: 'GuardDuty Parameters'
       Parameters:
       - GuardDutyfindingPublish
       - PrimaryEmailGuardduty
+    - Label:
+        default: 'Config service Parameters'
+      Parameters:
+      - DeliveryFrequency
+      - PrimaryEmailConfigservice
 Parameters:
   CloudtrailName:
     Description: 'Name of Cloudtrail'
@@ -73,10 +78,27 @@ Parameters:
     AllowedPattern: ".+@.+"
     Default: 'example@example.com'
     Description: "'Optional' Enter the email address you want to notify  GuardDuty findings and events."
+  DeliveryFrequency:
+    Type: String
+    Default: Six_Hours
+    Description: The frequency with which AWS Config delivers configuration snapshots.
+    AllowedValues:
+      - One_Hour
+      - Three_Hours
+      - Six_Hours
+      - Twelve_Hours
+      - TwentyFour_Hours
+  PrimaryEmailConfigservice:
+    Type: String
+    AllowedPattern: ".+@.+"
+    Default: 'example@example.com'
+    Description: "'Optional' Enter the email address you want to notify  stream change and notifications. ' this can cause a high volume of email.'"
 Conditions:
   InternalBucket: !Equals [!Ref ExternalTrailBucket, '']
   ExternalBucket: !Not [!Equals [!Ref ExternalTrailBucket, '']]
   SecondarySubcription: !Not [!Equals [!Ref SecondaryEmailCloudwatchalarm, 'example2@example.com']]
+  GuarddutySubcription: !Not [!Equals [!Ref PrimaryEmailGuardduty, 'example@example.com']]
+  ConfigSubcription: !Not [!Equals [!Ref PrimaryEmailConfigservice, 'example@example.com']]
 Resources:
   myKMSKey:
     Type: 'AWS::KMS::Key'
@@ -196,6 +218,7 @@ Resources:
   TrailLogGroupRole:
     Type: 'AWS::IAM::Role'
     Properties:
+      RoleName: Cloudtrailloggroup
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -217,8 +240,8 @@ Resources:
   CloudTrailTopic:
     Type: 'AWS::SNS::Topic'
     Properties:
-        DisplayName: cloudtrail-SNS
-        TopicName: Notify-cloudtrail-event-notification
+        DisplayName: Notify Cloudtrail Event
+        TopicName: Cloudtrail-Event
   TrailTopicPolicy:
     Type: 'AWS::SNS::TopicPolicy'
     Properties:
@@ -747,8 +770,8 @@ Resources:
   AlarmNotificationTopic:
     Type: AWS::SNS::Topic
     Properties:
-      DisplayName: CloudwatchAlarm-SNS
-      TopicName: Notify-Cloudwatch-Alarm-notification
+      DisplayName: Notify Cloudwatch Alarm
+      TopicName: CloudwatchAlarm
       Subscription:
       - Endpoint:
           Ref: PrimaryEmailCloudwatchalarm
@@ -760,13 +783,239 @@ Resources:
         Endpoint: !Ref SecondaryEmailCloudwatchalarm
         Protocol: email
         TopicArn: !Ref 'AlarmNotificationTopic'
+  Detector:
+    Type: 'AWS::GuardDuty::Detector'
+    Properties:
+      Enable: 'true'
+      FindingPublishingFrequency: !Ref GuardDutyfindingPublish
+  EventsRule:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Name: Notify-GuardDuty-Event
+      Description: This rule will notify guardduty events and finding to SNS.
+      EventPattern:
+        source:
+          - aws.guardduty
+      State: ENABLED
+      Targets:
+        - Arn: !Ref GaurddutyTopic
+          Id: sns
+  GaurddutyTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      TopicName: GuardDuty-Findings
+      DisplayName: AWS Guardduty Notification Topic
+      Subscription: []
+  GuardDutyTopicPolicy:
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - 'sns:Publish'
+            Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Resource:
+              - !Ref GaurddutyTopic
+      Topics:
+        - !Ref GaurddutyTopic
+    Type: 'AWS::SNS::TopicPolicy'
+  NotifcationSNS:
+    Condition: GuarddutySubcription
+    Type: AWS::SNS::Subscription
+    Properties:
+        Endpoint: !Ref PrimaryEmailGuardduty
+        Protocol: email
+        TopicArn: !Ref 'GaurddutyTopic'
+  ConfigBucket:
+    DeletionPolicy: Retain
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "configservice-bucket-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+  ConfigBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ConfigBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AWSConfigBucketPermissionsCheck
+            Effect: Allow
+            Principal:
+              Service:
+                - config.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource:
+              - !Sub "arn:aws:s3:::${ConfigBucket}"
+          - Sid: AWSConfigBucketDelivery
+            Effect: Allow
+            Principal:
+              Service:
+                - config.amazonaws.com
+            Action: s3:PutObject
+            Resource:
+              - !Sub "arn:aws:s3:::${ConfigBucket}/AWSLogs/${AWS::AccountId}/*"
+  IAMexecutionrole:
+    DependsOn:
+    - IAMAdminrole
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AWSCloudFormationStackSetExecutionRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: 
+                AWS:
+                - !Join ['', ['arn:aws:iam::', !Ref 'AWS::AccountId',':role/AWSCloudFormationStackSetAdministrationRole']]
+            Action:
+            - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess  
+  IAMAdminrole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AWSCloudFormationStackSetAdministrationRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: 
+              Service:
+                - cloudformation.amazonaws.com
+            Action:
+              - sts:AssumeRole    
+      Policies: 
+        - 
+          PolicyName: 'sts-assume-for-stack-admin'
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+              - 
+                Effect: "Allow"
+                Action:
+                  - sts:AssumeRole
+                Resource: '!Sub arn:aws:iam::${AWS::AccountId}:role/AWSCloudFormationStackSetExecutionRole'
+  ConfigServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AWSConfigServiceRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - config.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSConfigRole
+      Policies:
+      - PolicyName: CIS-configservice-policy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Sid: AWSConfigRole
+            Effect: Allow
+            Action:
+            - config:Put*
+            Resource: '*'
+          - Sid: AWSCloudTrailConfig
+            Effect: Allow
+            Action:
+            - cloudtrail:List*
+            - cloudtrail:Desc*
+            - cloudtrail:Look*
+            - cloudtrail:Get*
+            Resource: '*'
+          - Sid: AWSConfigPutObject
+            Effect: Allow
+            Action: s3:PutObject
+            Resource:
+            - !Sub 'arn:aws:s3:::${ConfigBucket}/AWSLogs/${AWS::AccountId}/*'
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+          - Sid: AWSConfigGetObject
+            Effect: Allow
+            Action: s3:GetBucketAcl
+            Resource:
+            - !Sub 'arn:aws:s3:::${ConfigBucket}'
+  ConfigTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: Config-Service
+      DisplayName: AWS Config Notification Topic
+  ConfigTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref ConfigTopic
+      PolicyDocument:
+        Statement:
+          - Sid: AWSConfigSNSPolicy
+            Action:
+              - sns:Publish
+            Effect: Allow
+            Resource: !Ref ConfigTopic
+            Principal:
+              Service:
+                - config.amazonaws.com
+  NotifcationSNS:
+    Condition: ConfigSubcription
+    Type: AWS::SNS::Subscription
+    Properties:
+        Endpoint: !Ref PrimaryEmailConfigservice
+        Protocol: email
+        TopicArn: !Ref 'ConfigTopic'
+  ConfigRecorder:
+    Type: AWS::Config::ConfigurationRecorder
+    DependsOn:
+    - ConfigServiceRole
+    Properties:
+      Name: myconfigservice-recorder
+      RoleARN: !GetAtt ConfigServiceRole.Arn
+      RecordingGroup:
+        AllSupported: true
+        IncludeGlobalResourceTypes: true
+  ConfigDeliveryChannel:
+    Type: AWS::Config::DeliveryChannel
+    DependsOn:
+    - ConfigTopic
+    - ConfigBucket
+    Properties:
+      Name: myconfigservice-deliverychannel
+      ConfigSnapshotDeliveryProperties:
+        DeliveryFrequency: !Ref DeliveryFrequency
+      S3BucketName: !Ref ConfigBucket
+      SnsTopicARN: !Ref ConfigTopic
 Outputs:
-  StackName:
-    Description: 'Stack name.'
-    Value: !Sub '${AWS::StackName}'
   SNSTopicname:
     Description: 'Name of SNS created for Cloudtrail events'
     Value: !GetAtt 'CloudTrailTopic.TopicName'
-  CloudtrailName:
-    Description: 'Name of Cloudtrail created by stack'
-    Value: !Ref CloudtrailName
+  ConfigS3BucketName: 
+    Description: "S3 Bucket Name for Config Service"
+    Value: !Ref ConfigBucket
+    Export: 
+      Name: !Sub "${AWS::StackName}-BUCKETNAME"
+  ConfigIAMRole:
+    Description: "IAM Role for configservice"
+    Value: !GetAtt ConfigServiceRole.Arn
+    Export: 
+      Name: !Sub "${AWS::StackName}-CONFIGROLEARN"
+  AdminIAMRole:
+    Description: "IAM Role for Administrator"
+    Value: !Ref IAMAdminrole
+    Export: 
+      Name: !Sub "${AWS::StackName}-ADMINROLENAME"
+  ExecutionIAMRole:
+    Description: "IAM Role for Execution"
+    Value: !Ref IAMexecutionrole
+    Export: 
+      Name: !Sub "${AWS::StackName}-EXECUTIONROLENAME"

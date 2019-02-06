@@ -3,7 +3,7 @@ AWSTemplateFormatVersion: 2010-09-09
 Description: Create global resources for Config service enable in all region
 Resources:
   ConfigBucket:
-    #DeletionPolicy: Retain
+    DeletionPolicy: Retain
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "configservice-bucket-${AWS::AccountId}"
@@ -123,8 +123,8 @@ Resources:
             Resource:
             - !Sub 'arn:aws:s3:::${ConfigBucket}'
 Outputs: 
-  SecurityGroup: 
-    Description: "S3 Bucket Name"
+  ConfigS3BucketName: 
+    Description: "S3 Bucket Name for Config Service"
     Value: !Ref ConfigBucket
     Export: 
       Name: !Sub "${AWS::StackName}-BUCKETNAME"
