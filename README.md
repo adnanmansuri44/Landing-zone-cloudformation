@@ -14,11 +14,17 @@ File-2. Master-Template.
 Usage: Run file in cloud-formation and enter required parameters. It will create following services.
 
    --> Cloudtrail with KMS Encryption Bucket.
+   
    --> Cloudwatch log of cloudtrail.
+   
    --> Cloudwatch alarm from cloudtrail logs. (16 Alarms-Recommended by CIS).
+   
    --> Enable Guardduty.
+   
    --> Enable Config service with SSE s3 bucket delivery.
+   
    --> Create SNS for each service for notification.
+   
    --> Create Cloudformation Admin and Execution role for Stackset.
    
 **** Stackset can gives you facility to run any template to cross account or cross region. ****
