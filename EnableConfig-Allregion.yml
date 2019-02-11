@@ -71,5 +71,5 @@ Resources:
       SnsTopicARN: !Ref ConfigTopic
 Outputs:
   SNSTopicname:
-    Description: 'Name of SNS created for Cloudtrail events'
+    Description: 'Name of SNS created for Config events'
     Value: !GetAtt 'ConfigTopic.TopicName'

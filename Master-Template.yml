@@ -183,10 +183,35 @@ Resources:
             Ref: myKMSKey
   TrailBucket:
     Condition: InternalBucket
+    DependsOn:
+    - LoggingBucket
     Type: 'AWS::S3::Bucket'
     DeletionPolicy: Retain
     Properties:
         BucketName: !Sub "cloudtrail-bucket-${AWS::AccountId}"
+        LoggingConfiguration:
+            DestinationBucketName: !Ref LoggingBucket
+            LogFilePrefix: !Sub "cloudtrail-bucket-${AWS::AccountId}/"
+        PublicAccessBlockConfiguration:
+            BlockPublicAcls: true
+            BlockPublicPolicy: true
+            IgnorePublicAcls: true
+            RestrictPublicBuckets: true 
+  LoggingBucket:
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Retain
+    Properties:
+        BucketName: !Sub "logging-bucket-${AWS::AccountId}"
+        AccessControl: LogDeliveryWrite
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+        PublicAccessBlockConfiguration:
+            BlockPublicAcls: true
+            BlockPublicPolicy: true
+            IgnorePublicAcls: true
+            RestrictPublicBuckets: true
   TrailBucketPolicy:
     Condition: InternalBucket
     Type: 'AWS::S3::BucketPolicy'
@@ -828,6 +853,8 @@ Resources:
         Protocol: email
         TopicArn: !Ref 'GaurddutyTopic'
   ConfigBucket:
+    DependsOn:
+    - LoggingBucket
     DeletionPolicy: Retain
     Type: AWS::S3::Bucket
     Properties:
@@ -836,6 +863,14 @@ Resources:
         ServerSideEncryptionConfiguration:
         - ServerSideEncryptionByDefault:
             SSEAlgorithm: AES256
+      LoggingConfiguration:
+        DestinationBucketName: !Ref LoggingBucket
+        LogFilePrefix: !Sub "configservice-bucket-${AWS::AccountId}/"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
   ConfigBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
