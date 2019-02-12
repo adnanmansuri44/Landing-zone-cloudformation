@@ -5,22 +5,20 @@ Metadata:
   'AWS::CloudFormation::Interface':
     ParameterGroups:
     - Label:
-        default: 'CloudTrail and Cloudwatch Parameters'
+        default: 'CloudTrail'
       Parameters:
       - CloudtrailName
       - CloudWatchLogsRetentionInDays
-      - ExternalTrailBucket
       - CloudwatchLogGroupName
-      - LogFilePrefix
       - PrimaryEmailCloudwatchalarm
       - SecondaryEmailCloudwatchalarm
     - Label:
-        default: 'GuardDuty Parameters'
+        default: 'GuardDuty'
       Parameters:
       - GuardDutyfindingPublish
       - PrimaryEmailGuardduty
     - Label:
-        default: 'Config service Parameters'
+        default: 'Config Service'
       Parameters:
       - DeliveryFrequency
       - PrimaryEmailConfigservice
@@ -38,10 +36,6 @@ Parameters:
     Type: Number
     Default: 14
     AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653]
-  ExternalTrailBucket:
-    Description: '"Optional" The name of the Amazon S3 bucket where CloudTrail publishes log files. If you leave this empty, the Amazon S3 bucket is created for you.'
-    Type: String
-    Default: ''
   CloudwatchLogGroupName:
     Description: '"Optional" Name of Cloudwatch Log Group'
     Type: String
@@ -50,10 +44,6 @@ Parameters:
     MaxLength: '512'
     AllowedPattern: "[\\w-/.]+"
     ConstraintDescription: "Log group names can be between 1 and 512 characters long. Allowed characters include a-z, A-Z, 0-9, '_' (underscore), '-' (hyphen), '/' (forward slash), and '.' (period)."
-  LogFilePrefix:
-    Description: '"Optional" The log file prefix.'
-    Type: String
-    Default: ''
   PrimaryEmailCloudwatchalarm:
     Type: String
     AllowedPattern: ".+@.+"
@@ -94,12 +84,103 @@ Parameters:
     Default: 'example@example.com'
     Description: "'Optional' Enter the email address you want to notify  stream change and notifications. ' this can cause a high volume of email.'"
 Conditions:
-  InternalBucket: !Equals [!Ref ExternalTrailBucket, '']
-  ExternalBucket: !Not [!Equals [!Ref ExternalTrailBucket, '']]
   SecondarySubcription: !Not [!Equals [!Ref SecondaryEmailCloudwatchalarm, 'example2@example.com']]
   GuarddutySubcription: !Not [!Equals [!Ref PrimaryEmailGuardduty, 'example@example.com']]
   ConfigSubcription: !Not [!Equals [!Ref PrimaryEmailConfigservice, 'example@example.com']]
 Resources:
+  forceiampolicy: 
+    DeletionPolicy: Retain
+    Type: AWS::IAM::ManagedPolicy
+    Properties: 
+        ManagedPolicyName: "Force_MFA"
+        Description: "This policy will force iam user to create MFA first. Without MFA user can not perform any operations."
+        PolicyDocument: 
+          Version: "2012-10-17"
+          Statement: 
+            - 
+              Sid: "AllowViewAccountInfo"
+              Effect: "Allow"
+              Action: 
+                - "iam:GetAccountPasswordPolicy"
+                - "iam:GetAccountSummary"
+                - "iam:ListVirtualMFADevices"
+              Resource: "*"
+            - 
+              Sid: "AllowManageOwnPasswords"
+              Effect: "Allow"
+              Action: 
+                - "iam:ChangePassword"
+                - "iam:GetUser"
+              Resource: "arn:aws:iam::*:user/${aws:username}"
+            - 
+              Sid: "AllowManageOwnAccessKeys"
+              Effect: "Allow"
+              Action: 
+                - "iam:CreateAccessKey"
+                - "iam:DeleteAccessKey"
+                - "iam:ListAccessKeys"
+                - "iam:UpdateAccessKey"
+              Resource: "arn:aws:iam::*:user/${aws:username}"
+            - 
+              Sid: "AllowManageOwnSigningCertificates"
+              Effect: "Allow"
+              Action: 
+                - "iam:DeleteSigningCertificate"
+                - "iam:ListSigningCertificates"
+                - "iam:UpdateSigningCertificate"
+                - "iam:UploadSigningCertificate"
+              Resource: "arn:aws:iam::*:user/${aws:username}"
+            - 
+              Sid: "AllowManageOwnSSHPublicKeys"
+              Effect: "Allow"
+              Action: 
+                - "iam:DeleteSSHPublicKey"
+                - "iam:GetSSHPublicKey"
+                - "iam:ListSSHPublicKeys"
+                - "iam:UpdateSSHPublicKey"
+                - "iam:UploadSSHPublicKey"
+              Resource: "arn:aws:iam::*:user/${aws:username}"
+            - 
+              Sid: "AllowManageOwnGitCredentials"
+              Effect: "Allow"
+              Action: 
+                - "iam:CreateServiceSpecificCredential"
+                - "iam:DeleteServiceSpecificCredential"
+                - "iam:ListServiceSpecificCredentials"
+                - "iam:ResetServiceSpecificCredential"
+                - "iam:UpdateServiceSpecificCredential"
+              Resource: "arn:aws:iam::*:user/${aws:username}"
+            - 
+              Sid: "AllowManageOwnVirtualMFADevice"
+              Effect: "Allow"
+              Action: 
+                - "iam:CreateVirtualMFADevice"
+                - "iam:DeleteVirtualMFADevice"
+              Resource: "arn:aws:iam::*:mfa/${aws:username}"
+            - 
+              Sid: "AllowManageOwnUserMFA"
+              Effect: "Allow"
+              Action: 
+                - "iam:DeactivateMFADevice"
+                - "iam:EnableMFADevice"
+                - "iam:ListMFADevices"
+                - "iam:ResyncMFADevice"
+              Resource: "arn:aws:iam::*:user/${aws:username}"
+            - 
+              Sid: "DenyAllExceptListedIfNoMFA"
+              Effect: "Deny"
+              NotAction: 
+                - "iam:CreateVirtualMFADevice"
+                - "iam:EnableMFADevice"
+                - "iam:GetUser"
+                - "iam:ListMFADevices"
+                - "iam:ListVirtualMFADevices"
+                - "iam:ResyncMFADevice"
+                - "sts:GetSessionToken"
+              Resource: "*"
+              Condition: 
+                  BoolIfExists: 
+                      aws:MultiFactorAuthPresent: "false"  
   myKMSKey:
     Type: 'AWS::KMS::Key'
     Properties:
@@ -182,7 +263,6 @@ Resources:
         TargetKeyId:
             Ref: myKMSKey
   TrailBucket:
-    Condition: InternalBucket
     DependsOn:
     - LoggingBucket
     Type: 'AWS::S3::Bucket'
@@ -213,7 +293,6 @@ Resources:
             IgnorePublicAcls: true
             RestrictPublicBuckets: true
   TrailBucketPolicy:
-    Condition: InternalBucket
     Type: 'AWS::S3::BucketPolicy'
     Properties:
       Bucket: !Ref TrailBucket
@@ -282,9 +361,9 @@ Resources:
       Topics:
       - !Ref CloudTrailTopic
   Trail:
-    Condition: InternalBucket
     DependsOn:
     - TrailTopicPolicy
+    - TrailBucket
     - TrailBucketPolicy
     - myKMSKey
     Type: 'AWS::CloudTrail::Trail'
@@ -309,38 +388,6 @@ Resources:
                     -   'arn:aws:lambda'
       KMSKeyId: !Ref myKMSKey
       S3BucketName: !Ref TrailBucket
-      S3KeyPrefix: !Ref LogFilePrefix
-      CloudWatchLogsLogGroupArn: !GetAtt 'TrailLogGroup.Arn'
-      CloudWatchLogsRoleArn: !GetAtt 'TrailLogGroupRole.Arn'
-      SnsTopicName: !GetAtt 'CloudTrailTopic.TopicName'
-  ExternalTrail:
-    Condition: ExternalBucket
-    DependsOn:
-    - TrailTopicPolicy
-    - myKMSKey
-    Type: 'AWS::CloudTrail::Trail'
-    Properties:
-      TrailName: !Ref CloudtrailName
-      IncludeGlobalServiceEvents: true
-      IsLogging: true
-      IsMultiRegionTrail: true
-      EnableLogFileValidation: true
-      EventSelectors:
-        - 
-            ReadWriteType: All
-            IncludeManagementEvents: true
-            DataResources: 
-            - 
-                Type: 'AWS::S3::Object'
-                Values: 
-                    -   'arn:aws:s3:::'
-            -
-                Type: 'AWS::Lambda::Function'
-                Values:
-                    -   'arn:aws:lambda'
-      KMSKeyId: !Ref myKMSKey
-      S3BucketName: !Ref ExternalTrailBucket
-      S3KeyPrefix: !Ref LogFilePrefix
       CloudWatchLogsLogGroupArn: !GetAtt 'TrailLogGroup.Arn'
       CloudWatchLogsRoleArn: !GetAtt 'TrailLogGroupRole.Arn'
       SnsTopicName: !GetAtt 'CloudTrailTopic.TopicName'
@@ -1031,6 +1078,9 @@ Resources:
       S3BucketName: !Ref ConfigBucket
       SnsTopicARN: !Ref ConfigTopic
 Outputs:
+  ForceMFAPolicy:
+    Description: 'Force MFA Policy arn'
+    Value: !Ref forceiampolicy
   SNSTopicname:
     Description: 'Name of SNS created for Cloudtrail events'
     Value: !GetAtt 'CloudTrailTopic.TopicName'
