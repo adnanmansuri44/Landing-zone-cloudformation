@@ -301,9 +301,8 @@ Resources:
   ConfigRuleForEvaluateMFAAllUsers:
     Type: AWS::Config::ConfigRule
     Properties:
-      ConfigRuleName: CIS-UsersMustHaveMfaEnabled
-      Description: CIS 1.2 - Ensure multi-factor authentication (MFA) is enabled for
-        all IAM users that have a password (Scored)
+      ConfigRuleName: iam-user-mfa-enabled
+      Description: Checks whether the AWS Identity and Access Management users have multi-factor authentication (MFA) en
       Scope:
         ComplianceResourceTypes:
         - AWS::IAM::User
@@ -435,9 +434,8 @@ Resources:
     - EvaluateUnusedCredentialsLambdaInvokePermission
     - ResourceForEvaluateCISBenchmarkPreconditions
     Properties:
-      ConfigRuleName: CIS-RotateUserPasswords
-      Description: CIS 1.3 - Ensure credentials unused for 90 days or greater are
-        disabled (Scored)
+      ConfigRuleName: iam-user-unused-credentials-check
+      Description: "Checks whether your AWS Identity and Access Management (IAM) users have passwords or active access keys that have not been used within the specified number of days you provided."
       Scope:
         ComplianceResourceTypes:
         - AWS::IAM::User
@@ -582,9 +580,8 @@ Resources:
     Type: AWS::Config::ConfigRule
     DependsOn: ResourceForEvaluateCISBenchmarkPreconditions
     Properties:
-      ConfigRuleName: CIS-IamPasswordPolicyMustMeetRequirements
-      Description: Evaluates whether the account password policy for IAM users meets
-        the specified CIS requirements 1.5 through 1.11
+      ConfigRuleName: iam-password-policy
+      Description: Checks whether the account password policy for IAM users meets the specified requirements.
       Scope:
         ComplianceResourceTypes:
         - AWS::IAM::User
