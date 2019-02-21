@@ -34,7 +34,7 @@ Parameters:
   CloudWatchLogsRetentionInDays:
     Description: '"Optional" The number of days log events are kept in CloudWatch Logs'
     Type: Number
-    Default: 14
+    Default: 90
     AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653]
   CloudwatchLogGroupName:
     Description: '"Optional" Name of Cloudwatch Log Group'
@@ -89,7 +89,6 @@ Conditions:
   ConfigSubcription: !Not [!Equals [!Ref PrimaryEmailConfigservice, 'example@example.com']]
 Resources:
   forceiampolicy: 
-    DeletionPolicy: Retain
     Type: AWS::IAM::ManagedPolicy
     Properties: 
         ManagedPolicyName: "Force_MFA"
@@ -111,7 +110,7 @@ Resources:
               Action: 
                 - "iam:ChangePassword"
                 - "iam:GetUser"
-              Resource: "arn:aws:iam::*:user/${aws:username}"
+              Resource: "arn:aws:iam::*:user/${aws:username}"             
             - 
               Sid: "AllowManageOwnAccessKeys"
               Effect: "Allow"
@@ -129,7 +128,7 @@ Resources:
                 - "iam:ListSigningCertificates"
                 - "iam:UpdateSigningCertificate"
                 - "iam:UploadSigningCertificate"
-              Resource: "arn:aws:iam::*:user/${aws:username}"
+              Resource: "arn:aws:iam::*:user/${aws:username}"       
             - 
               Sid: "AllowManageOwnSSHPublicKeys"
               Effect: "Allow"
@@ -139,7 +138,7 @@ Resources:
                 - "iam:ListSSHPublicKeys"
                 - "iam:UpdateSSHPublicKey"
                 - "iam:UploadSSHPublicKey"
-              Resource: "arn:aws:iam::*:user/${aws:username}"
+              Resource: "arn:aws:iam::*:user/${aws:username}"         
             - 
               Sid: "AllowManageOwnGitCredentials"
               Effect: "Allow"
@@ -149,7 +148,7 @@ Resources:
                 - "iam:ListServiceSpecificCredentials"
                 - "iam:ResetServiceSpecificCredential"
                 - "iam:UpdateServiceSpecificCredential"
-              Resource: "arn:aws:iam::*:user/${aws:username}"
+              Resource: "arn:aws:iam::*:user/${aws:username}"       
             - 
               Sid: "AllowManageOwnVirtualMFADevice"
               Effect: "Allow"
@@ -191,7 +190,7 @@ Resources:
         Version: 2012-10-17
         Id: Key policy created by CloudTrail
         Statement:
-          - Sid: Enable IAM User Permissions
+          - Sid: Allow administration of the key
             Effect: Allow
             Principal:
               AWS: !Join 
@@ -262,6 +261,52 @@ Resources:
         AliasName: alias/Logencryption
         TargetKeyId:
             Ref: myKMSKey
+  LoggingBucket:
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Retain
+    Properties:
+        BucketName: !Sub "logging-bucket-${AWS::AccountId}"
+        AccessControl: LogDeliveryWrite
+        LifecycleConfiguration:
+            Rules:
+            - Id: Transition90daysRetain7yrs
+              Status: Enabled
+              ExpirationInDays: 2555
+              Transition:
+                TransitionInDays: 90
+                StorageClass: STANDARD_IA
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+        VersioningConfiguration:
+            Status: Enabled
+        PublicAccessBlockConfiguration:
+            BlockPublicAcls: true
+            BlockPublicPolicy: true
+            IgnorePublicAcls: true
+            RestrictPublicBuckets: true
+  LoggingBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Retain
+    DependsOn: LoggingBucket
+    Properties:
+      Bucket: !Ref LoggingBucket
+      PolicyDocument:
+        Statement:
+        - Sid: Enforce HTTPS Connections
+          Action: s3:*
+          Effect: Deny
+          Principal: '*'
+          Resource: !Sub "arn:aws:s3:::${LoggingBucket}/*"
+          Condition:
+            Bool:
+              aws:SecureTransport: false
+        - Sid: Restrict Delete* Actions
+          Action: s3:Delete*
+          Effect: Deny
+          Principal: '*'
+          Resource: !Sub "arn:aws:s3:::${LoggingBucket}/*"
   TrailBucket:
     DependsOn:
     - LoggingBucket
@@ -269,6 +314,9 @@ Resources:
     DeletionPolicy: Retain
     Properties:
         BucketName: !Sub "cloudtrail-bucket-${AWS::AccountId}"
+        AccessControl: Private
+        VersioningConfiguration:
+            Status: Enabled        
         LoggingConfiguration:
             DestinationBucketName: !Ref LoggingBucket
             LogFilePrefix: !Sub "cloudtrail-bucket-${AWS::AccountId}/"
@@ -277,22 +325,13 @@ Resources:
             BlockPublicPolicy: true
             IgnorePublicAcls: true
             RestrictPublicBuckets: true 
-  LoggingBucket:
-    Type: 'AWS::S3::Bucket'
-    DeletionPolicy: Retain
-    Properties:
-        BucketName: !Sub "logging-bucket-${AWS::AccountId}"
-        AccessControl: LogDeliveryWrite
         BucketEncryption:
-          ServerSideEncryptionConfiguration:
-            - ServerSideEncryptionByDefault:
-                SSEAlgorithm: AES256
-        PublicAccessBlockConfiguration:
-            BlockPublicAcls: true
-            BlockPublicPolicy: true
-            IgnorePublicAcls: true
-            RestrictPublicBuckets: true
+            ServerSideEncryptionConfiguration:
+                - ServerSideEncryptionByDefault:
+                    SSEAlgorithm: AES256
   TrailBucketPolicy:
+    DependsOn: TrailBucket
+    DeletionPolicy: Retain
     Type: 'AWS::S3::BucketPolicy'
     Properties:
       Bucket: !Ref TrailBucket
@@ -314,15 +353,29 @@ Resources:
           Condition:
             StringEquals:
               's3:x-amz-acl': 'bucket-owner-full-control'
+        - Sid: Enforce HTTPS Connections
+          Action: s3:*
+          Effect: Deny
+          Principal: '*'
+          Resource: !Sub "arn:aws:s3:::${TrailBucket}/*"
+          Condition:
+            Bool:
+              aws:SecureTransport: false
+        - Sid: Restrict Delete* Actions
+          Action: s3:Delete*
+          Effect: Deny
+          Principal: '*'
+          Resource: !Sub "arn:aws:s3:::${TrailBucket}/*"
   TrailLogGroup:
     Type: 'AWS::Logs::LogGroup'
     Properties:
       LogGroupName: !Ref CloudwatchLogGroupName
       RetentionInDays: !Ref CloudWatchLogsRetentionInDays
   TrailLogGroupRole:
+    DependsOn: TrailLogGroup
     Type: 'AWS::IAM::Role'
     Properties:
-      RoleName: Cloudtrailloggroup
+      RoleName: Cloudtrail-Cloudwatch-Loggroup
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -336,11 +389,14 @@ Resources:
         PolicyDocument:
           Version: '2012-10-17'
           Statement:
-          - Effect: Allow
-            Action:
-            - 'logs:CreateLogStream'
-            - 'logs:PutLogEvents'
-            Resource: !GetAtt 'TrailLogGroup.Arn'
+          - Sid: AWSCloudTrailCreateLogStream
+            Effect: Allow
+            Action: logs:CreateLogStream
+            Resource: !GetAtt TrailLogGroup.Arn
+          - Sid: AWSCloudTrailPutLogEvents
+            Effect: Allow
+            Action: logs:PutLogEvents
+            Resource: !GetAtt TrailLogGroup.Arn
   CloudTrailTopic:
     Type: 'AWS::SNS::Topic'
     Properties:
@@ -366,9 +422,11 @@ Resources:
     - TrailBucket
     - TrailBucketPolicy
     - myKMSKey
+    - TrailLogGroupRole
     Type: 'AWS::CloudTrail::Trail'
     Properties:
       TrailName: !Ref CloudtrailName
+      S3BucketName: !Ref TrailBucket
       IncludeGlobalServiceEvents: true
       IsLogging: true
       IsMultiRegionTrail: true
@@ -387,7 +445,6 @@ Resources:
                 Values:
                     -   'arn:aws:lambda'
       KMSKeyId: !Ref myKMSKey
-      S3BucketName: !Ref TrailBucket
       CloudWatchLogsLogGroupArn: !GetAtt 'TrailLogGroup.Arn'
       CloudWatchLogsRoleArn: !GetAtt 'TrailLogGroupRole.Arn'
       SnsTopicName: !GetAtt 'CloudTrailTopic.TopicName'
@@ -900,12 +957,14 @@ Resources:
         Protocol: email
         TopicArn: !Ref 'GaurddutyTopic'
   ConfigBucket:
-    DependsOn:
-    - LoggingBucket
+    DependsOn: LoggingBucket
     DeletionPolicy: Retain
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "configservice-bucket-${AWS::AccountId}"
+      AccessControl: Private
+      VersioningConfiguration:
+        Status: Enabled    
       BucketEncryption:
         ServerSideEncryptionConfiguration:
         - ServerSideEncryptionByDefault:
@@ -919,7 +978,9 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
   ConfigBucketPolicy:
+    DependsOn: ConfigBucket
     Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Retain
     Properties:
       Bucket: !Ref ConfigBucket
       PolicyDocument:
@@ -941,6 +1002,19 @@ Resources:
             Action: s3:PutObject
             Resource:
               - !Sub "arn:aws:s3:::${ConfigBucket}/AWSLogs/${AWS::AccountId}/*"
+          - Sid: Enforce HTTPS Connections
+            Action: s3:*
+            Effect: Deny
+            Principal: '*'
+            Resource: !Sub "arn:aws:s3:::${ConfigBucket}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+          - Sid: Restrict Delete* Actions
+            Action: s3:Delete*
+            Effect: Deny
+            Principal: '*'
+            Resource: !Sub "arn:aws:s3:::${ConfigBucket}/*"          
   IAMexecutionrole:
     DependsOn:
     - IAMAdminrole
