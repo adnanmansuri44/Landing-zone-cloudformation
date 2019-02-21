@@ -581,3 +581,7 @@ Resources:
           MessageType: ConfigurationItemChangeNotification
         SourceIdentifier: !GetAtt FunctionForVpcPeeringRouteTablesRule.Arn  
       MaximumExecutionFrequency: One_Hour
+Outputs:
+  MasterConfigrole:
+    Description: 'IAM Role for Config service Lambda execution'
+    Value: !GetAtt 'MasterConfigRole.Arn'        
