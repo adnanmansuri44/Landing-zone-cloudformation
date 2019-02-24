@@ -1,0 +1,661 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Enable AWS Config Service in region by stackset required execution and admin role   
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: 'Cloudwatch Alerts'
+      Parameters:
+      - PrimaryEmailforAlerts
+      - Cloudwatchalertconfigure
+      - lambdaCWEventrole
+    - Label:
+        default: 'Config-Service'
+      Parameters:
+      - ConfigS3bucketname
+      - ConfigserviceIAMroleARN
+      - Lambdaconfigrole
+      - Configruleconfigure
+      - Frequency
+      - PrimaryEmailforConfig
+    - Label:
+        default: 'Guardduty-Service'
+      Parameters:
+      - ConfigureGuardduty
+      - PrimaryEmailGuardduty
+      - GuardDutyfindingPublish
+    ParameterLabels:
+      ConfigureGuardduty:
+        default: Want to Configure Guardduty and event Notifcation ?
+      PrimaryEmailforAlerts:
+        default: Primary Email Address for Cloudwatch Alerts
+      Cloudwatchalertconfigure:
+        default: Want to Configure Cloudwatch Alerts ?
+      GuardDutyfindingPublish:
+        default: Enter Guardduty Finding Publish Frequency
+      PrimaryEmailGuardduty:
+        default: Email Address for Guardduty Findings
+      lambdaCWEventrole:
+        default: Enter the IAM role Arn needs for Lambda to Cloudwatch Events via SNS
+      PrimaryEmailforConfig:
+        default: Email Address for Config Service Notification
+      Frequency:
+        default: Config Service Snapshot Delivery Frequency
+      Configruleconfigure:
+        default: Enter Guardduty Finding Publish Frequency
+      Lambdaconfigrole:
+        default: Want to Configure Guardduty and event Notifcation ?
+      ConfigS3bucketname:
+        default: Enter the S3 Bucket for Config Service
+      ConfigserviceIAMroleARN:
+        default: Enter the IAM role Arn For Config Service        
+Parameters:
+  ConfigureGuardduty:
+    Type: String
+    Default: 'No'
+    Description: "Configures AWS Guardduty Service regionally"
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+  PrimaryEmailGuardduty:
+    Type: String
+    AllowedPattern: ".+@.+"
+    Default: 'example@example.com'
+    Description: "'Required-Only If you want to Cloudwatch ruless' Triggered alert to this email address. Verification required and you can opt-out later. Make sure to validate otherwise you won't be able to delete the subscription and have to wait 3 days for automatic deletion."
+  GuardDutyfindingPublish:
+    Type: String
+    Description: "'Optional' Enter the Finding Publish Frequency Value."
+    Default: FIFTEEN_MINUTES
+    AllowedValues:
+      - FIFTEEN_MINUTES
+      - ONE_HOUR
+      - Six_Hours
+  Cloudwatchalertconfigure:
+    Type: String
+    Default: 'No'
+    Description: "Configures AWS Cloudwatch Events Rule regionally"
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+  PrimaryEmailforAlerts:
+    Type: String
+    AllowedPattern: ".+@.+"
+    Default: 'example@example.com'
+    Description: "'Required-Only If you want to Cloudwatch ruless' Triggered alert to this email address. Verification required and you can opt-out later. Make sure to validate otherwise you won't be able to delete the subscription and have to wait 3 days for automatic deletion."    
+  lambdaCWEventrole:
+    Type: String
+    Description: Enter Config Service IAM Role Arn which created by Master stack.
+    Default: "arn:aws:iam::366775409521:role/Lambda-CW-Events-SNS"
+  ConfigS3bucketname:
+    Type: String
+    Description: Name of s3 bucket which created by Master stack.
+    Default: "configservice-bucket-366775409521"
+  ConfigserviceIAMroleARN:
+    Type: String
+    Description: Enter Config Service IAM Role Arn which created by Master stack.
+    Default: "arn:aws:iam::366775409521:role/AWSConfigServiceRole"
+  Lambdaconfigrole:
+    Type: String
+    Description: Enter Config Service IAM Role Arn which created by Master stack.
+    Default: "arn:aws:iam::366775409521:role/Lambda-config-rule"
+  Configruleconfigure:
+    Type: String
+    Default: 'No'
+    Description: "Configures AWS Config Rule regionally"
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+  Frequency:
+    Type: String
+    Default: Six_Hours
+    Description: The frequency with which AWS Config delivers configuration snapshots.
+    AllowedValues:
+      - One_Hour
+      - Three_Hours
+      - Six_Hours
+      - Twelve_Hours
+      - TwentyFour_Hours
+  PrimaryEmailforConfig:
+    Type: String
+    AllowedPattern: ".+@.+"
+    Default: 'example@example.com'
+    Description: "'Optional' Enter the email address you want to notify  stream change and notifications. ' this can cause a high volume of email.'"
+Conditions:
+    Subcription: !Not [!Equals [!Ref PrimaryEmailforConfig, 'example@example.com']]
+    Rules: !Not [!Equals [!Ref Configruleconfigure, 'No']]
+    Events: !Not [!Equals [!Ref Cloudwatchalertconfigure, 'No']]
+    Guardduty: !Not [!Equals [!Ref ConfigureGuardduty, 'No']]
+    
+Resources:
+  ConfigTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: configservice-topic
+      DisplayName: AWS Config Notification Topic
+  ConfigTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref ConfigTopic
+      PolicyDocument:
+        Statement:
+          - Sid: AWSConfigSNSPolicy
+            Action:
+              - sns:Publish
+            Effect: Allow
+            Resource: !Ref ConfigTopic
+            Principal:
+              Service:
+                - config.amazonaws.com
+  NotifcationSNS:
+    Condition: Subcription
+    Type: AWS::SNS::Subscription
+    Properties:
+        Endpoint: !Ref PrimaryEmailforConfig
+        Protocol: email
+        TopicArn: !Ref 'ConfigTopic'
+  ConfigRecorder:
+    Type: AWS::Config::ConfigurationRecorder
+    Properties:
+      Name: myconfigservice-recorder
+      RoleARN: !Ref ConfigserviceIAMroleARN  
+      RecordingGroup:
+        AllSupported: true
+        IncludeGlobalResourceTypes: true
+  ConfigDeliveryChannel:
+    Type: AWS::Config::DeliveryChannel
+    Properties:
+      Name: myconfigservice-deliverychannel
+      ConfigSnapshotDeliveryProperties:
+        DeliveryFrequency: !Ref Frequency
+      S3BucketName: !Ref ConfigS3bucketname
+      SnsTopicARN: !Ref ConfigTopic
+  ConfigRuleForEvaluateCMKsRotation:
+    Type: "AWS::Config::ConfigRule"
+    DependsOn: ConfigRecorder
+    Condition: Rules
+    Properties: 
+      ConfigRuleName: cmk-backing-key-rotation-enabled
+      Description: "Checks that key rotation is enabled for each key and matches to the key ID of the customer created customer master key (CMK). The rule is compliant, if the key rotation is enabled for specific key object."
+      Source: 
+        Owner: AWS
+        SourceIdentifier: CMK_BACKING_KEY_ROTATION_ENABLED
+      MaximumExecutionFrequency: One_Hour        
+  ConfigRuleForEvaluateVpcFlowLogs:
+    DependsOn: ConfigRecorder
+    Condition: Rules
+    Type: "AWS::Config::ConfigRule"
+    Properties: 
+      ConfigRuleName: vpc-flow-logs-enabled
+      Description: "Checks whether Amazon Virtual Private Cloud flow logs are found and enabled for Amazon VPC."
+      Source: 
+        Owner: AWS
+        SourceIdentifier: VPC_FLOW_LOGS_ENABLED
+      MaximumExecutionFrequency: One_Hour
+  ConfigRuleForEvaluatesshport:
+    DependsOn: ConfigRecorder  
+    Condition: Rules
+    Type: "AWS::Config::ConfigRule"
+    Properties: 
+      ConfigRuleName: restricted-ssh
+      Description: "Checks whether security groups that are in use disallow unrestricted incoming SSH traffic."
+      Scope:
+        ComplianceResourceTypes:
+          - AWS::EC2::SecurityGroup
+      Source: 
+        Owner: AWS
+        SourceIdentifier: INCOMING_SSH_DISABLED
+  ConfigRuleForEvaluateRdpport:
+    DependsOn: ConfigRecorder
+    Condition: Rules
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: restricted-3389-ports
+      Description: "Checks whether security groups that are in use disallow '3389' unrestricted incoming TCP traffic to the specified ports."
+      InputParameters:
+        blockedPort1: '3389'
+      Scope:
+        ComplianceResourceTypes:
+        - AWS::EC2::SecurityGroup
+      Source:
+        Owner: AWS
+        SourceIdentifier: RESTRICTED_INCOMING_TRAFFIC 
+  ConfigRuleForEvaluateDefaultSecurityGroup:
+    DependsOn: ConfigRecorder
+    Condition: Rules
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: vpc-default-security-group-closed
+      Description: "Checks that the default security group of any Amazon Virtual Private Cloud (VPC) does not allow inbound or outbound traffic. The rule is non-compliant if the default security group has one or more inbound or outbound traffic."
+      Scope:
+        ComplianceResourceTypes:
+        - AWS::EC2::SecurityGroup
+      Source:
+        Owner: AWS
+        SourceIdentifier: VPC_DEFAULT_SECURITY_GROUP_CLOSED 
+  FunctionForVpcPeeringRouteTablesRule:
+    Type: AWS::Lambda::Function
+    Condition: Rules
+    Properties:
+      FunctionName: EvaluateVpcPeeringRouteTables
+      Code:
+        ZipFile: |
+          #==================================================================================================
+          # Function: EvaluateVpcPeeringRouteTables
+          # Purpose:  Evaluates whether VPC route tables are least access
+          #==================================================================================================
+          import boto3
+          import json
+          def lambda_handler(event, context):
+            is_compliant = True
+            invoking_event = json.loads(event['invokingEvent'])
+            annotation = ''
+            route_table_id = invoking_event['configurationItem']['resourceId']
+            #print (json.dumps(boto3.client('ec2').describe_route_tables(RouteTableIds=[route_table_id])))
+            for route_table in boto3.client('ec2').describe_route_tables(RouteTableIds=[route_table_id])['RouteTables']:
+              for route in route_table['Routes']:
+                if 'VpcPeeringConnectionId' in route:
+                  if int(str(route['DestinationCidrBlock']).split("/", 1)[1]) < 24:
+                    is_compliant = False
+                    annotation = 'VPC peered route table has a large CIDR block destination.'
+              evaluations = [
+                {
+                  'ComplianceResourceType': invoking_event['configurationItem']['resourceType'],
+                  'ComplianceResourceId': route_table_id,
+                  'ComplianceType': 'COMPLIANT' if is_compliant else 'NON_COMPLIANT',
+                  'OrderingTimestamp': invoking_event['configurationItem']['configurationItemCaptureTime']
+                }
+              ]
+              if annotation: evaluations[0]['Annotation'] = annotation
+              response = boto3.client('config').put_evaluations(
+              Evaluations = evaluations,
+              ResultToken = event['resultToken'])
+      Description: Evaluates whether VPC peered route tables are least access
+      Handler: index.lambda_handler
+      MemorySize: 1024
+      Role: !Ref Lambdaconfigrole     
+      Runtime: python2.7
+      Timeout: 10
+  ConfigPermissionToCallVpcPeeringRouteTablesLambda:
+    Type: AWS::Lambda::Permission
+    Condition: Rules
+    DependsOn: FunctionForVpcPeeringRouteTablesRule
+    Properties:
+      FunctionName: !GetAtt FunctionForVpcPeeringRouteTablesRule.Arn
+      Action: lambda:InvokeFunction
+      Principal: config.amazonaws.com
+  ConfigRuleForVpcPeeringRouteTabless:
+    Type: AWS::Config::ConfigRule
+    Condition: Rules
+    DependsOn:
+    - FunctionForVpcPeeringRouteTablesRule
+    - ConfigPermissionToCallVpcPeeringRouteTablesLambda
+    - ConfigRecorder
+    Properties:
+      ConfigRuleName: VpcPeeringRouteTablesMustBeLeastAccess
+      Description: Evaluates whether VPC peered route tables are least access
+      Scope:
+        ComplianceResourceTypes:
+        - AWS::EC2::RouteTable
+      Source:
+        Owner: CUSTOM_LAMBDA
+        SourceDetails:
+        - EventSource: aws.config
+          MessageType: ConfigurationItemChangeNotification
+        SourceIdentifier: !GetAtt FunctionForVpcPeeringRouteTablesRule.Arn  
+      MaximumExecutionFrequency: One_Hour
+#-----------------------------------------
+#Cloudwatch Events
+#-----------------------------------------      
+  AlarmNotificationTopic:
+    Condition: Events
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Notify Cloudwatch Alerts
+      TopicName: CW-Notifications
+      Subscription:
+      - Endpoint:
+          Ref: PrimaryEmailforAlerts
+        Protocol: email
+  FunctionToFormatCloudWatchEvent:
+    Condition: Events
+    Type: AWS::Lambda::Function
+    DependsOn: AlarmNotificationTopic
+    Properties:
+      FunctionName: FormatCloudWatchEvent
+      Code:
+        ZipFile: !Sub |
+          #==================================================================================================
+          # Function: process-cloudwatch-event
+          # Purpose:  Processes CloudWatch Event before publishing to SNS.
+          #==================================================================================================
+          import boto3
+          import json
+          SNS_TOPIC_ARN = '${AlarmNotificationTopic}'
+          #==================================================================================================
+          # Function handler
+          #==================================================================================================
+          def lambda_handler(event, context):
+            source = event['source']
+            if source == 'aws.config':
+              response = boto3.client('sns').publish(
+                TopicArn = SNS_TOPIC_ARN,
+                Message = json.dumps(event, indent=4),
+                Subject = 'NOTIFICATION {0} : {1}'.format(event['detail-type'], event['detail']['configRuleName']),
+                MessageStructure = 'raw'
+              )
+            else:
+              response = boto3.client('sns').publish(
+                TopicArn = SNS_TOPIC_ARN,
+                Message = json.dumps(event, indent=4),
+                Subject = 'NOTIFICATION {0}:{1}'.format(event['detail']['eventSource'], event['detail']['eventName']),
+                MessageStructure = 'raw'
+              )
+      Description: Formats a given CloudWatch Event to be published to an SNS topic
+      Handler: index.lambda_handler
+      MemorySize: 1024
+      Role: !Ref lambdaCWEventrole
+      Runtime: python2.7
+      Timeout: 5
+  LambdaPermissionForCloudTrailCloudWatchEventRules:
+    Condition: Events
+    Type: AWS::Lambda::Permission
+    DependsOn:
+    - FunctionToFormatCloudWatchEvent
+    Properties:
+      FunctionName: !GetAtt FunctionToFormatCloudWatchEvent.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com  
+  CloudTrailCloudWatchEventRule:
+    Condition: Events
+    Type: AWS::Events::Rule
+    Properties:
+      Name: CloudtrailChange
+      Description: Publishes formatted CloudTrail change events to an SNS topic
+      EventPattern:
+        detail-type:
+        - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+          - cloudtrail.amazonaws.com
+          eventName:
+          - StopLogging
+          - DeleteTrail
+          - UpdateTrail
+          - CreateTrail
+          - StartLogging
+      State: ENABLED
+      Targets:
+      - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
+        Id: TargetFunctionV1
+  DetectS3BucketPolicyChanges:
+    Condition: Events
+    Type: AWS::Events::Rule
+    Properties:
+      Name: S3BucketPolicyChanges
+      Description: Publishes formatted S3 bucket policy change events to an SNS topic
+      EventPattern:
+        detail-type:
+        - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+          - s3.amazonaws.com
+          eventName:
+          - PutBucketAcl
+          - PutBucketPolicy
+          - PutBucketCors
+          - PutBucketLifecycle
+          - PutBucketReplication
+          - DeleteBucketPolicy
+          - DeleteBucketCors
+          - DeleteBucketLifecycle
+          - DeleteBucketReplication
+      State: ENABLED
+      Targets:
+      - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
+        Id: TargetFunctionV1        
+  EC2InstanceStatechangeCloudWatchEventRule:
+    Condition: Events
+    Type: AWS::Events::Rule
+    Properties:
+      Name: EC2statechange
+      Description: Publishes formatted EC2 change events to an SNS topic
+      EventPattern:
+        Source: 
+        - aws.ec2      
+        detail-type:
+        - EC2 Instance State-change Notification
+      State: ENABLED
+      Targets:
+      - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
+        Id: TargetFunctionV1
+  CMKdeletecloudwatcheventrule:
+    Condition: Events
+    Type: AWS::Events::Rule
+    Properties:
+      Name: KMSDeleteordisable
+      Description: Publishes formatted KMS change events to an SNS topic
+      EventPattern:
+        detail-type:
+        - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+          - kms.amazonaws.com
+          eventName:
+          - DisableKey
+          - ScheduleKeyDeletion
+      State: ENABLED
+      Targets:
+      - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
+        Id: TargetFunctionV1    
+  DetectConfigChanges:
+    Condition: Events
+    Type: AWS::Events::Rule
+    Properties:
+      Name: ConfigServiceChanges
+      Description: Publishes formatted Config change events to an SNS topic
+      EventPattern:
+        detail-type:
+        - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+          - config.amazonaws.com
+          eventName:
+          - PutConfigurationRecorder
+          - StopConfigurationRecorder
+          - DeleteDeliveryChannel
+          - PutDeliveryChannel
+      State: ENABLED
+      Targets:
+      - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
+        Id: TargetFunctionV1
+  ConfigRulesComplianceChangeCloudWatchEventRule:
+    Condition: Events
+    Type: AWS::Events::Rule
+    Properties:
+      Name: ConfigRulesComplianceChanges
+      Description: Publishes formatted Config Rules Compliance Changes events to an SNS topic
+      EventPattern:
+        detail-type:
+        - Config Rules Compliance Change
+        source:
+        - aws.config
+        detail:
+          configRuleName:
+          - cmk-backing-key-rotation-enabled
+          - vpc-flow-logs-enabled
+          - restricted-ssh
+          - restricted-3389-ports
+          - vpc-default-security-group-closed
+          - VpcPeeringRouteTablesMustBeLeastAccess
+      State: ENABLED
+      Targets:
+      - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
+        Id: TargetFunctionV1        
+  SecurityGroupChangesCloudWatchEventRule:
+    Condition: Events
+    Type: AWS::Events::Rule
+    Properties:
+      Name: SecurityGroupChanges
+      Description: Publishes formatted security group change events to an SNS topic
+      EventPattern:
+        detail-type:
+        - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+          - ec2.amazonaws.com
+          eventName:
+          - AuthorizeSecurityGroupIngress
+          - AuthorizeSecurityGroupEgress
+          - RevokeSecurityGroupIngress
+          - RevokeSecurityGroupEgress
+          - CreateSecurityGroup
+          - DeleteSecurityGroup
+      State: ENABLED
+      Targets:
+      - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
+        Id: TargetFunctionV1
+  NetworkAclChangesCloudWatchEventRule:
+    Condition: Events
+    Type: AWS::Events::Rule
+    Properties:
+      Name: NetworkAclChanges
+      Description: Publishes formatted network ACL change events to an SNS topic
+      EventPattern:
+        detail-type:
+        - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+          - ec2.amazonaws.com
+          eventName:
+          - CreateNetworkAcl
+          - CreateNetworkAclEntry
+          - DeleteNetworkAcl
+          - DeleteNetworkAclEntry
+          - ReplaceNetworkAclEntry
+          - ReplaceNetworkAclAssociation
+      State: ENABLED
+      Targets:
+      - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
+        Id: TargetFunctionV1
+  NetworkChangeCloudWatchEventRule:
+    Condition: Events
+    Type: AWS::Events::Rule
+    Properties:
+      Name: NetworkChangeEvents
+      Description: Publishes formatted network change events to an SNS topic
+      EventPattern:
+        detail-type:
+        - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+          - ec2.amazonaws.com
+          eventName:
+          - AcceptVpcPeeringConnection
+          - AttachClassicLinkVpc
+          - AttachInternetGateway
+          - AssociateRouteTable
+          - CreateCustomerGateway
+          - CreateInternetGateway
+          - CreateRoute
+          - CreateRouteTable
+          - CreateVpc
+          - CreateVpcPeeringConnection
+          - DeleteCustomerGateway
+          - DeleteInternetGateway
+          - DeleteRoute
+          - DeleteRouteTable
+          - DeleteDhcpOptions
+          - DeleteVpc
+          - DeleteVpcPeeringConnection
+          - DetachClassicLinkVpc
+          - DetachInternetGateway
+          - DisableVpcClassicLink
+          - DisassociateRouteTable
+          - EnableVpcClassicLink
+          - ModifyVpcAttribute
+          - RejectVpcPeeringConnection
+          - ReplaceRoute
+          - ReplaceRouteTableAssociation
+      State: ENABLED
+      Targets:
+      - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
+        Id: TargetFunctionV1     
+  ConfigRulesComplianceChangeCloudWatchEventRule:
+    Condition: Events
+    Type: AWS::Events::Rule
+    Properties:
+      Name: ConfigRulesComplianceChanges
+      Description: Publishes formatted Config Rules Compliance Changes events to an SNS topic
+      EventPattern:
+        detail-type:
+        - Config Rules Compliance Change
+        source:
+        - aws.config
+        detail:
+          configRuleName:
+          - cmk-backing-key-rotation-enabled
+          - vpc-flow-logs-enabled
+          - restricted-ssh
+          - restricted-3389-ports
+          - vpc-default-security-group-closed
+          - VpcPeeringRouteTablesMustBeLeastAccess
+      State: ENABLED
+      Targets:
+      - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
+        Id: TargetFunctionV1
+#------------------------------------------
+#Guardduty Configuration
+#------------------------------------------        
+  Detector:
+    Condition: Guardduty
+    Type: 'AWS::GuardDuty::Detector'
+    Properties:
+      Enable: 'true'
+      FindingPublishingFrequency: !Ref GuardDutyfindingPublish
+  EventsRule:
+    Condition: Guardduty
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Name: Notify-GuardDuty-Event
+      Description: This rule will notify guardduty events and finding to SNS.
+      EventPattern:
+        source:
+          - aws.guardduty
+      State: ENABLED
+      Targets:
+        - Arn: !Ref GaurddutyTopic
+          Id: sns
+  GaurddutyTopic:
+    Condition: Guardduty
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      TopicName: GuardDuty-Findings
+      DisplayName: AWS Guardduty Notification Topic
+      Subscription: []
+  GuardDutyTopicPolicy:
+    Condition: Guardduty
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - 'sns:Publish'
+            Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Resource:
+              - !Ref GaurddutyTopic
+      Topics:
+        - !Ref GaurddutyTopic
+    Type: 'AWS::SNS::TopicPolicy'
+  GuarddutySubcription:
+    Condition: Guardduty
+    Type: AWS::SNS::Subscription
+    Properties:
+        Endpoint: !Ref PrimaryEmailGuardduty
+        Protocol: email
+        TopicArn: !Ref 'GaurddutyTopic'        
+Outputs:
+  ConfigSNSTopicname:
+    Description: 'Name of SNS created for Config events'
+    Value: !GetAtt 'ConfigTopic.TopicName' 

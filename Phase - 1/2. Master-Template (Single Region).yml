@@ -22,6 +22,25 @@ Metadata:
       Parameters:
       - DeliveryFrequency
       - PrimaryEmailConfigservice
+    ParameterLabels:
+      CloudtrailName:
+        default: Cloudtrail Name
+      CloudWatchLogsRetentionInDays:
+        default: Cloudwatch Logs Retention Days
+      CloudwatchLogGroupName:
+        default: Cloudtrail logs Group Name in Cloudwatch
+      PrimaryEmailCloudwatchalarm:
+        default: Primary Email Address for Cloudwatch Alerts(Required)
+      SecondaryEmailCloudwatchalarm:
+        default: Primary Email Address for Cloudwatch Alerts
+      GuardDutyfindingPublish:
+        default: Enter Guardduty Finding Publish Frequency
+      PrimaryEmailGuardduty:
+        default: Email Address for Guardduty Findings
+      DeliveryFrequency:
+        default: Config Service Snapshot Delivery Frequency
+      PrimaryEmailConfigservice:
+        default: Email Address for Config Service Notification        
 Parameters:
   CloudtrailName:
     Description: 'Name of Cloudtrail'
@@ -88,6 +107,10 @@ Conditions:
   GuarddutySubcription: !Not [!Equals [!Ref PrimaryEmailGuardduty, 'example@example.com']]
   ConfigSubcription: !Not [!Equals [!Ref PrimaryEmailConfigservice, 'example@example.com']]
 Resources:
+
+#---------------------------
+#Create Additional Resources(IAM)
+#---------------------------
   forceiampolicy: 
     Type: AWS::IAM::ManagedPolicy
     Properties: 
@@ -179,7 +202,52 @@ Resources:
               Resource: "*"
               Condition: 
                   BoolIfExists: 
-                      aws:MultiFactorAuthPresent: "false"  
+                      aws:MultiFactorAuthPresent: "false" 
+  IAMexecutionrole:
+    DependsOn:
+    - IAMAdminrole
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AWSCloudFormationStackSetExecutionRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: 
+                AWS:
+                - !Join ['', ['arn:aws:iam::', !Ref 'AWS::AccountId',':role/AWSCloudFormationStackSetAdministrationRole']]
+            Action:
+            - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess  
+  IAMAdminrole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AWSCloudFormationStackSetAdministrationRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: 
+              Service:
+                - cloudformation.amazonaws.com
+            Action:
+              - sts:AssumeRole    
+      Policies: 
+        - 
+          PolicyName: 'sts-assume-for-stack-admin'
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement: 
+              - 
+                Effect: "Allow"
+                Action:
+                  - sts:AssumeRole
+                Resource: '!Sub arn:aws:iam::${AWS::AccountId}:role/AWSCloudFormationStackSetExecutionRole'                      
+#---------------------------------------
+#CloudTrail & Cloudwatch Configuration
+#---------------------------------------                      
   myKMSKey:
     Type: 'AWS::KMS::Key'
     Properties:
@@ -258,7 +326,7 @@ Resources:
   myKeyAlias:
     Type: AWS::KMS::Alias
     Properties:
-        AliasName: alias/Logencryption
+        AliasName: alias/Trail-Log-Encryption
         TargetKeyId:
             Ref: myKMSKey
   LoggingBucket:
@@ -448,93 +516,95 @@ Resources:
       CloudWatchLogsLogGroupArn: !GetAtt 'TrailLogGroup.Arn'
       CloudWatchLogsRoleArn: !GetAtt 'TrailLogGroupRole.Arn'
       SnsTopicName: !GetAtt 'CloudTrailTopic.TopicName'
-  VpcChangesMetricFilter:
-    DependsOn:
-    - TrailLogGroup
-    Type: AWS::Logs::MetricFilter
+  AlarmNotificationTopic:
+    Type: AWS::SNS::Topic
     Properties:
-      LogGroupName:
-        Ref: CloudwatchLogGroupName
-      FilterPattern: "{ ($.eventName = CreateVpc) || ($.eventName = DeleteVpc) || ($.eventName = ModifyVpcAttribute) || ($.eventName = AcceptVpcPeeringConnection) || ($.eventName = CreateVpcPeeringConnection) || ($.eventName = DeleteVpcPeeringConnection) || ($.eventName = RejectVpcPeeringConnection) || ($.eventName = AttachClassicLinkVpc) || ($.eventName = DetachClassicLinkVpc) || ($.eventName = DisableVpcClassicLink) || ($.eventName = EnableVpcClassicLink) }"
-      MetricTransformations:
-      - MetricNamespace: CloudTrailMetrics
-        MetricName: VpcEventCount
-        MetricValue: '1'
-  VpcChangesAlarm:
-    DependsOn:
-    - VpcChangesMetricFilter
-    Type: AWS::CloudWatch::Alarm
+      DisplayName: Notify Cloudwatch Alerts
+      TopicName: CW-Notifications
+      Subscription:
+      - Endpoint:
+          Ref: PrimaryEmailCloudwatchalarm
+        Protocol: email
+  SecondaryNotificationsub:
+    Condition: SecondarySubcription
+    Type: AWS::SNS::Subscription
     Properties:
-      AlarmName: VpcChanges
-      AlarmDescription: Alarms when an API call is made to create, update or delete a VPC, VPC peering connection or VPC connection to classic.
-      AlarmActions:
-      - Ref: AlarmNotificationTopic
-      MetricName: VpcEventCount
-      Namespace: CloudTrailMetrics
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      EvaluationPeriods: '1'
-      Period: '60'
-      Statistic: Sum
-      Threshold: '1'
-      TreatMissingData: notBreaching
-  EC2InstanceChangesMetricFilter:
-    DependsOn:
-    - TrailLogGroup
-    Type: AWS::Logs::MetricFilter
+        Endpoint: !Ref SecondaryEmailCloudwatchalarm
+        Protocol: email
+        TopicArn: !Ref 'AlarmNotificationTopic'
+  RoleForCloudWatchEvents:
+    Type: AWS::IAM::Role
+    DependsOn: AlarmNotificationTopic
     Properties:
-      LogGroupName:
-        Ref: CloudwatchLogGroupName
-      FilterPattern: "{ ($.eventName = RunInstances) || ($.eventName = RebootInstances) || ($.eventName = StartInstances) || ($.eventName = StopInstances) || ($.eventName = TerminateInstances) }"
-      MetricTransformations:
-      - MetricNamespace: CloudTrailMetrics
-        MetricName: EC2InstanceEventCount
-        MetricValue: '1'
-  EC2InstanceChangesAlarm:
+      RoleName: Lambda-CW-Events-SNS
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+      - PolicyName: CIS-AllowSnsPublish
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+          - Effect: Allow
+            Action: sns:Publish
+            Resource: "*"
+  FunctionToFormatCloudWatchEvent:
+    Type: AWS::Lambda::Function
     DependsOn:
-    - EC2InstanceChangesMetricFilter
-    Type: AWS::CloudWatch::Alarm
+    - RoleForCloudWatchEvents
+    - AlarmNotificationTopic
     Properties:
-      AlarmName: EC2InstanceChanges
-      AlarmDescription: Alarms when an API call is made to create, terminate, start,stop or reboot an EC2 instance.
-      AlarmActions:
-      - Ref: AlarmNotificationTopic
-      MetricName: EC2InstanceEventCount
-      Namespace: CloudTrailMetrics
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      EvaluationPeriods: '1'
-      Period: '60'
-      Statistic: Sum
-      Threshold: '1'
-      TreatMissingData: notBreaching
-  EC2LargeInstanceChangesMetricFilter:
+      FunctionName: FormatCloudWatchEvent
+      Code:
+        ZipFile: !Sub |
+          #==================================================================================================
+          # Function: process-cloudwatch-event
+          # Purpose:  Processes CloudWatch Event before publishing to SNS.
+          #==================================================================================================
+          import boto3
+          import json
+          SNS_TOPIC_ARN = '${AlarmNotificationTopic}'
+          #==================================================================================================
+          # Function handler
+          #==================================================================================================
+          def lambda_handler(event, context):
+            source = event['source']
+            if source == 'aws.config':
+              response = boto3.client('sns').publish(
+                TopicArn = SNS_TOPIC_ARN,
+                Message = json.dumps(event, indent=4),
+                Subject = 'NOTIFICATION {0} : {1}'.format(event['detail-type'], event['detail']['configRuleName']),
+                MessageStructure = 'raw'
+              )
+            else:
+              response = boto3.client('sns').publish(
+                TopicArn = SNS_TOPIC_ARN,
+                Message = json.dumps(event, indent=4),
+                Subject = 'NOTIFICATION {0}:{1}'.format(event['detail']['eventSource'], event['detail']['eventName']),
+                MessageStructure = 'raw'
+              )
+      Description: Formats a given CloudWatch Event to be published to an SNS topic
+      Handler: index.lambda_handler
+      MemorySize: 1024
+      Role: !GetAtt RoleForCloudWatchEvents.Arn
+      Runtime: python2.7
+      Timeout: 5
+  LambdaPermissionForCloudTrailCloudWatchEventRules:
+    Type: AWS::Lambda::Permission
     DependsOn:
-    - TrailLogGroup
-    Type: AWS::Logs::MetricFilter
+    - FunctionToFormatCloudWatchEvent
     Properties:
-      LogGroupName:
-        Ref: CloudwatchLogGroupName
-      FilterPattern: "{ ($.eventName = RunInstances) && (($.requestParameters.instanceType = *.8xlarge) || ($.requestParameters.instanceType = *.4xlarge)) }"
-      MetricTransformations:
-      - MetricNamespace: CloudTrailMetrics
-        MetricName: EC2LargeInstanceEventCount
-        MetricValue: '1'
-  EC2LargeInstanceChangesAlarm:
-    DependsOn:
-    - EC2LargeInstanceChangesMetricFilter
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: CloudTrailEC2LargeInstanceChanges
-      AlarmDescription: Alarms when an API call is made to create, terminate, start, stop or reboot a 4x or 8x-large EC2 instance.
-      AlarmActions:
-      - Ref: AlarmNotificationTopic
-      MetricName: EC2LargeInstanceEventCount
-      Namespace: CloudTrailMetrics
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      EvaluationPeriods: '1'
-      Period: '60'
-      Statistic: Sum
-      Threshold: '1'
-      TreatMissingData: notBreaching
+      FunctionName: !GetAtt FunctionToFormatCloudWatchEvent.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
   ConsoleSignInFailuresMetricFilter:
     DependsOn:
     - TrailLogGroup
@@ -622,64 +692,6 @@ Resources:
       Statistic: Sum
       Threshold: '1'
       TreatMissingData: notBreaching      
-  DisabledOrDeletedCmksMetricFilter:
-    DependsOn:
-    - TrailLogGroup
-    Type: AWS::Logs::MetricFilter
-    Properties:
-      LogGroupName:
-        Ref: CloudwatchLogGroupName
-      FilterPattern: "{($.eventSource = kms.amazonaws.com) && (($.eventName=DisableKey)||($.eventName=ScheduleKeyDeletion))}"
-      MetricTransformations:
-      - MetricNamespace: CloudTrailMetrics
-        MetricName: DisableorDeletedCmkEventCount
-        MetricValue: '1'
-  DisableordeleteofCMKsAlarm:
-    DependsOn:
-    - DisabledOrDeletedCmksMetricFilter
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: DisableordeleteofCMKs
-      AlarmDescription: Alarm for Disabling or Scheduled Deletion of Customer Created CMKs.
-      AlarmActions:
-      - Ref: AlarmNotificationTopic
-      MetricName: DisableorDeletedCmkEventCount
-      Namespace: CloudTrailMetrics
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      EvaluationPeriods: '1'
-      Period: '60'
-      Statistic: Sum
-      Threshold: '1'
-      TreatMissingData: notBreaching
-  RouteTableConfigChangesMetricFilter:
-    DependsOn:
-    - TrailLogGroup
-    Type: AWS::Logs::MetricFilter
-    Properties:
-      LogGroupName:
-        Ref: CloudwatchLogGroupName
-      FilterPattern: "{ ($.eventName = CreateRoute) || ($.eventName = CreateRouteTable) || ($.eventName = ReplaceRoute) || ($.eventName = ReplaceRouteTableAssociation) || ($.eventName = DeleteRouteTable) || ($.eventName = DeleteRoute) || ($.eventName = DisassociateRouteTable) }"
-      MetricTransformations:
-      - MetricNamespace: CloudTrailMetrics
-        MetricName: RouteTableEventCount
-        MetricValue: '1'
-  RouteTableChangesAlarm:
-    DependsOn:
-    - RouteTableConfigChangesMetricFilter
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: RouteTableChanges
-      AlarmDescription: Alarm for Route Table Changes.
-      AlarmActions:
-      - Ref: AlarmNotificationTopic
-      MetricName: RouteTableEventCount
-      Namespace: CloudTrailMetrics
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      EvaluationPeriods: '1'
-      Period: '60'
-      Statistic: Sum
-      Threshold: '1'
-      TreatMissingData: notBreaching
   RootuserIdentityusageMetricFilter:
     DependsOn:
     - TrailLogGroup
@@ -709,26 +721,10 @@ Resources:
       Statistic: Sum
       Threshold: '1'
       TreatMissingData: notBreaching
-  AlarmNotificationTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      DisplayName: Notify Cloudwatch Alarm
-      TopicName: CloudwatchAlarm
-      Subscription:
-      - Endpoint:
-          Ref: PrimaryEmailCloudwatchalarm
-        Protocol: email
-  SecondaryNotificationsub:
-    Condition: SecondarySubcription
-    Type: AWS::SNS::Subscription
-    Properties:
-        Endpoint: !Ref SecondaryEmailCloudwatchalarm
-        Protocol: email
-        TopicArn: !Ref 'AlarmNotificationTopic'
   IamPolicyChangesCloudWatchEventRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: DetectIamPolicyChanges
+      Name: IAMPolicychange
       Description: Publishes formatted IAM policy change events to an SNS topic
       EventPattern:
         detail-type:
@@ -737,31 +733,31 @@ Resources:
           eventSource:
           - iam.amazonaws.com
           eventName:
-          - CreateAccessKey
-          - DeleteAccessKey
-          - DeleteRolePolicy
-          - DeleteUserPolicy
-          - PutGroupPolicy
-          - PutRolePolicy
-          - PutUserPolicy
-          - CreatePolicy
-          - DeletePolicy
-          - CreatePolicyVersion
-          - DeletePolicyVersion
-          - AttachRolePolicy
-          - DetachRolePolicy
-          - AttachUserPolicy
-          - DetachUserPolicy
-          - AttachGroupPolicy
-          - DetachGroupPolicy
+            - AttachGroupPolicy
+            - AttachRolePolicy
+            - AttachUserPolicy
+            - CreateAccessKey
+            - CreatePolicy
+            - CreatePolicyVersion
+            - DeleteAccessKey
+            - DeletePolicy
+            - DeletePolicyVersion
+            - DeleteRolePolicy
+            - DeleteUserPolicy
+            - DetachGroupPolicy
+            - DetachRolePolicy
+            - DetachUserPolicy
+            - PutGroupPolicy
+            - PutRolePolicy
+            - PutUserPolicy
       State: ENABLED
       Targets:
       - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
-        Id: TargetFunctionV1   
+        Id: TargetFunctionV1       
   CloudTrailCloudWatchEventRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: DetectCloudTrailChanges
+      Name: CloudtrailChange
       Description: Publishes formatted CloudTrail change events to an SNS topic
       EventPattern:
         detail-type:
@@ -773,6 +769,8 @@ Resources:
           - StopLogging
           - DeleteTrail
           - UpdateTrail
+          - CreateTrail
+          - StartLogging
       State: ENABLED
       Targets:
       - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
@@ -780,7 +778,7 @@ Resources:
   DetectS3BucketPolicyChanges:
     Type: AWS::Events::Rule
     Properties:
-      Name: DetectS3BucketPolicyChanges
+      Name: S3BucketPolicyChanges
       Description: Publishes formatted S3 bucket policy change events to an SNS topic
       EventPattern:
         detail-type:
@@ -801,12 +799,43 @@ Resources:
       State: ENABLED
       Targets:
       - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
+        Id: TargetFunctionV1        
+  EC2InstanceStatechangeCloudWatchEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: EC2statechange
+      Description: Publishes formatted EC2 change events to an SNS topic
+      EventPattern:
+        Source: 
+        - aws.ec2      
+        detail-type:
+        - EC2 Instance State-change Notification
+      State: ENABLED
+      Targets:
+      - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
         Id: TargetFunctionV1
+  CMKdeletecloudwatcheventrule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: KMSDeleteordisable
+      Description: Publishes formatted KMS change events to an SNS topic
+      EventPattern:
+        detail-type:
+        - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+          - kms.amazonaws.com
+          eventName:
+          - DisableKey
+          - ScheduleKeyDeletion
+      State: ENABLED
+      Targets:
+      - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
+        Id: TargetFunctionV1    
   DetectConfigChanges:
     Type: AWS::Events::Rule
-    Condition: IsLevel2
     Properties:
-      Name: DetectConfigChanges
+      Name: ConfigServiceChanges
       Description: Publishes formatted Config change events to an SNS topic
       EventPattern:
         detail-type:
@@ -826,7 +855,7 @@ Resources:
   ConfigRulesComplianceChangeCloudWatchEventRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: CIS-DetectConfigRulesComplianceChanges
+      Name: ConfigRulesComplianceChanges
       Description: Publishes formatted Config Rules Compliance Changes events to an SNS topic
       EventPattern:
         detail-type:
@@ -844,8 +873,8 @@ Resources:
           - root-account-hardware-mfa-enabled
           - iam-user-no-policies-check
           - InstancesMustUseIamRoles
-          - iam-policy-no-statements-with-admin-access
           - AwsSupportRoleExists
+          - iam-policy-no-statements-with-admin-access
           - cloudtrail-enabled
           - cloud-trail-cloud-watch-logs-enabled
           - CloudTrailBucketMustBeSecure
@@ -863,9 +892,8 @@ Resources:
         Id: TargetFunctionV1        
   SecurityGroupChangesCloudWatchEventRule:
     Type: AWS::Events::Rule
-    Condition: IsLevel2
     Properties:
-      Name: DetectSecurityGroupChanges
+      Name: SecurityGroupChanges
       Description: Publishes formatted security group change events to an SNS topic
       EventPattern:
         detail-type:
@@ -886,9 +914,8 @@ Resources:
         Id: TargetFunctionV1
   NetworkAclChangesCloudWatchEventRule:
     Type: AWS::Events::Rule
-    Condition: IsLevel2
     Properties:
-      Name: DetectNetworkAclChanges
+      Name: NetworkAclChanges
       Description: Publishes formatted network ACL change events to an SNS topic
       EventPattern:
         detail-type:
@@ -910,7 +937,7 @@ Resources:
   NetworkChangeCloudWatchEventRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: DetectNetworkChangeEvents
+      Name: NetworkChangeEvents
       Description: Publishes formatted network change events to an SNS topic
       EventPattern:
         detail-type:
@@ -948,80 +975,48 @@ Resources:
       State: ENABLED
       Targets:
       - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
-        Id: TargetFunctionV1       
-  RoleForCloudWatchEvents:
-    Type: AWS::IAM::Role
-    DependsOn: AlarmNotificationTopic
+        Id: TargetFunctionV1     
+  ConfigRulesComplianceChangeCloudWatchEventRule:
+    Type: AWS::Events::Rule
     Properties:
-      RoleName: lambda-cloudwatchevent-sns-execution
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service:
-            - lambda.amazonaws.com
-          Action:
-          - sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-      - PolicyName: CIS-AllowSnsPublish
-        PolicyDocument:
-          Version: 2012-10-17
-          Statement:
-          - Effect: Allow
-            Action: sns:Publish
-            Resource: !Ref AlarmNotificationTopic
-  FunctionToFormatCloudWatchEvent:
-    Type: AWS::Lambda::Function
-    DependsOn:
-    - RoleForCloudWatchEvents
-    - AlarmNotificationTopic
-    Properties:
-      FunctionName: FormatCloudWatchEvent
-      Code:
-        ZipFile: !Sub |
-          #==================================================================================================
-          # Function: process-cloudwatch-event
-          # Purpose:  Processes CloudWatch Event before publishing to SNS.
-          #==================================================================================================
-          import boto3
-          import json
-          SNS_TOPIC_ARN = '${AlarmNotificationTopic}'
-          #==================================================================================================
-          # Function handler
-          #==================================================================================================
-          def lambda_handler(event, context):
-            source = event['source']
-            if source == 'aws.config':
-              response = boto3.client('sns').publish(
-                TopicArn = SNS_TOPIC_ARN,
-                Message = json.dumps(event, indent=4),
-                Subject = 'NOTIFICATION {0} : {1}'.format(event['detail-type'], event['detail']['configRuleName']),
-                MessageStructure = 'raw'
-              )
-            else:
-              response = boto3.client('sns').publish(
-                TopicArn = SNS_TOPIC_ARN,
-                Message = json.dumps(event, indent=4),
-                Subject = 'NOTIFICATION {0}:{1}'.format(event['detail']['eventSource'], event['detail']['eventName']),
-                MessageStructure = 'raw'
-              )
-      Description: Formats a given CloudWatch Event to be published to an SNS topic
-      Handler: index.lambda_handler
-      MemorySize: 1024
-      Role: !GetAtt RoleForCloudWatchEvents.Arn
-      Runtime: python2.7
-      Timeout: 5
-  LambdaPermissionForCloudTrailCloudWatchEventRules:
-    Type: AWS::Lambda::Permission
-    DependsOn:
-    - FunctionToFormatCloudWatchEvent
-    Properties:
-      FunctionName: !GetAtt FunctionToFormatCloudWatchEvent.Arn
-      Action: lambda:InvokeFunction
-      Principal: events.amazonaws.com        
+      Name: ConfigRulesComplianceChanges
+      Description: Publishes formatted Config Rules Compliance Changes events to an SNS topic
+      EventPattern:
+        detail-type:
+        - Config Rules Compliance Change
+        source:
+        - aws.config
+        detail:
+          configRuleName:
+          - mfa-enabled-for-iam-console-access
+          - iam-user-unused-credentials-check
+          - access-keys-rotated
+          - iam-password-policy
+          - iam-root-access-key-check
+          - root-account-mfa-enabled
+          - root-account-hardware-mfa-enabled
+          - iam-user-no-policies-check
+          - InstancesMustUseIamRoles
+          - iam-policy-no-statements-with-admin-access
+          - AwsSupportRoleExists
+          - cloudtrail-enabled
+          - cloud-trail-cloud-watch-logs-enabled
+          - CloudTrailBucketMustBeSecure
+          - cloud-trail-log-file-validation-enabled
+          - cloud-trail-encryption-enabled
+          - cmk-backing-key-rotation-enabled
+          - vpc-flow-logs-enabled
+          - restricted-ssh
+          - restricted-3389-ports
+          - vpc-default-security-group-closed
+          - VpcPeeringRouteTablesMustBeLeastAccess
+      State: ENABLED
+      Targets:
+      - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
+        Id: TargetFunctionV1 
+#------------------------------------------
+#Guardduty Configuration
+#------------------------------------------        
   Detector:
     Type: 'AWS::GuardDuty::Detector'
     Properties:
@@ -1059,13 +1054,16 @@ Resources:
       Topics:
         - !Ref GaurddutyTopic
     Type: 'AWS::SNS::TopicPolicy'
-  NotifcationSNS:
+  GuarddutySubcription:
     Condition: GuarddutySubcription
     Type: AWS::SNS::Subscription
     Properties:
         Endpoint: !Ref PrimaryEmailGuardduty
         Protocol: email
         TopicArn: !Ref 'GaurddutyTopic'
+#----------------------------------------
+#ConfigService Configurations
+#----------------------------------------
   ConfigBucket:
     DependsOn: LoggingBucket
     DeletionPolicy: Retain
@@ -1125,48 +1123,6 @@ Resources:
             Effect: Deny
             Principal: '*'
             Resource: !Sub "arn:aws:s3:::${ConfigBucket}/*"          
-  IAMexecutionrole:
-    DependsOn:
-    - IAMAdminrole
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: AWSCloudFormationStackSetExecutionRole
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal: 
-                AWS:
-                - !Join ['', ['arn:aws:iam::', !Ref 'AWS::AccountId',':role/AWSCloudFormationStackSetAdministrationRole']]
-            Action:
-            - sts:AssumeRole
-      Path: /
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AdministratorAccess  
-  IAMAdminrole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: AWSCloudFormationStackSetAdministrationRole
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal: 
-              Service:
-                - cloudformation.amazonaws.com
-            Action:
-              - sts:AssumeRole    
-      Policies: 
-        - 
-          PolicyName: 'sts-assume-for-stack-admin'
-          PolicyDocument: 
-            Version: '2012-10-17'
-            Statement: 
-              - 
-                Effect: "Allow"
-                Action:
-                  - sts:AssumeRole
-                Resource: '!Sub arn:aws:iam::${AWS::AccountId}:role/AWSCloudFormationStackSetExecutionRole'
   ConfigServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -1233,7 +1189,7 @@ Resources:
             Principal:
               Service:
                 - config.amazonaws.com
-  NotifcationSNS:
+  ConfigServiceSNS:
     Condition: ConfigSubcription
     Type: AWS::SNS::Subscription
     Properties:
@@ -1584,6 +1540,9 @@ Resources:
         Owner: AWS
         SourceIdentifier: IAM_POLICY_NO_STATEMENTS_WITH_ADMIN_ACCESS  
   ConfigRuleForEvaluateCloudTrailLogsEncryption:
+    DependsOn: 
+    - Trail
+    - ConfigRecorder
     Type: "AWS::Config::ConfigRule"
     Properties: 
       ConfigRuleName: cloudtrail-enabled
@@ -1746,6 +1705,7 @@ Resources:
         Owner: AWS
         SourceIdentifier: CLOUD_TRAIL_ENCRYPTION_ENABLED
       MaximumExecutionFrequency: One_Hour   
+#####**********Regional Rules*************    
   ConfigRuleForEvaluateCMKsRotation:
     Type: "AWS::Config::ConfigRule"
     DependsOn: ConfigRecorder
@@ -1755,10 +1715,7 @@ Resources:
       Source: 
         Owner: AWS
         SourceIdentifier: CMK_BACKING_KEY_ROTATION_ENABLED
-      MaximumExecutionFrequency: One_Hour
-    
-#####**********Regional Rules*************      
-
+      MaximumExecutionFrequency: One_Hour  
   ConfigRuleForEvaluateVpcFlowLogs:
     Type: "AWS::Config::ConfigRule"
     DependsOn: ConfigRecorder
@@ -1882,7 +1839,7 @@ Resources:
       MaximumExecutionFrequency: One_Hour      
 Outputs:
   ForceMFAPolicy:
-    Description: 'Force MFA Policy arn'
+    Description: 'Name of Force MFA Policy'
     Value: !Ref forceiampolicy
   SNSTopicname:
     Description: 'Name of SNS created for Cloudtrail events'
