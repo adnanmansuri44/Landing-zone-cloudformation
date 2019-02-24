@@ -125,7 +125,7 @@ Resources:
     Type: AWS::Lambda::Function
     DependsOn: MasterConfigRole
     Properties:
-      FunctionName: CIS-EvaluateInstanceRoleUse
+      FunctionName: EvaluateInstanceRoleUse
       Code:
         ZipFile: |
           #==================================================================================================
@@ -455,7 +455,20 @@ Resources:
       Source: 
         Owner: AWS
         SourceIdentifier: CLOUD_TRAIL_ENCRYPTION_ENABLED
-      MaximumExecutionFrequency: One_Hour   
+      MaximumExecutionFrequency: One_Hour
+  ConfigRuleForEvaluateCloudTrailLogsEncryption:
+    Type: "AWS::Config::ConfigRule"
+    Properties: 
+      ConfigRuleName: cloudtrail-enabled
+      Description: "Checks whether AWS CloudTrail is enabled in your AWS account."
+      InputParameters:
+        s3BucketName: !Sub "cloudtrail-bucket-${AWS::AccountId}"
+        snsTopicArn: !GetAtt 'CloudTrailTopic.TopicName'
+        cloudWatchLogsLogGroupArn: !GetAtt 'TrailLogGroupRole.Arn'
+      Source: 
+        Owner: AWS
+        SourceIdentifier: CLOUD_TRAIL_ENABLED
+      MaximumExecutionFrequency: One_Hour       
   ConfigRuleForEvaluateCMKsRotation:
     Type: "AWS::Config::ConfigRule"
     Properties: 
