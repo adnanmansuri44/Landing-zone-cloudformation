@@ -22,6 +22,25 @@ Metadata:
       Parameters:
       - DeliveryFrequency
       - PrimaryEmailConfigservice
+    ParameterLabels:
+      CloudtrailName:
+        default: Cloudtrail Name
+      CloudWatchLogsRetentionInDays:
+        default: Cloudwatch Logs Retention Days
+      CloudwatchLogGroupName:
+        default: Cloudtrail logs Group Name in Cloudwatch
+      PrimaryEmailCloudwatchalarm:
+        default: Primary Email Address for Cloudwatch Alerts(Required)
+      SecondaryEmailCloudwatchalarm:
+        default: Primary Email Address for Cloudwatch Alerts
+      GuardDutyfindingPublish:
+        default: Enter Guardduty Finding Publish Frequency
+      PrimaryEmailGuardduty:
+        default: Email Address for Guardduty Findings
+      DeliveryFrequency:
+        default: Config Service Snapshot Delivery Frequency
+      PrimaryEmailConfigservice:
+        default: Email Address for Config Service Notification        
 Parameters:
   CloudtrailName:
     Description: 'Name of Cloudtrail'
@@ -517,7 +536,7 @@ Resources:
     Type: AWS::IAM::Role
     DependsOn: AlarmNotificationTopic
     Properties:
-      RoleName: lambda-cloudwatchevent-sns-execution
+      RoleName: Lambda-CW-Events-SNS
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -536,7 +555,7 @@ Resources:
           Statement:
           - Effect: Allow
             Action: sns:Publish
-            Resource: !Ref AlarmNotificationTopic
+            Resource: "*"
   FunctionToFormatCloudWatchEvent:
     Type: AWS::Lambda::Function
     DependsOn:
@@ -787,9 +806,10 @@ Resources:
       Name: EC2statechange
       Description: Publishes formatted EC2 change events to an SNS topic
       EventPattern:
+        Source: 
+        - aws.ec2      
         detail-type:
         - EC2 Instance State-change Notification
-        Source: aws.ec2
       State: ENABLED
       Targets:
       - Arn: !GetAtt FunctionToFormatCloudWatchEvent.Arn
@@ -1685,6 +1705,7 @@ Resources:
         Owner: AWS
         SourceIdentifier: CLOUD_TRAIL_ENCRYPTION_ENABLED
       MaximumExecutionFrequency: One_Hour   
+#####**********Regional Rules*************    
   ConfigRuleForEvaluateCMKsRotation:
     Type: "AWS::Config::ConfigRule"
     DependsOn: ConfigRecorder
@@ -1694,9 +1715,7 @@ Resources:
       Source: 
         Owner: AWS
         SourceIdentifier: CMK_BACKING_KEY_ROTATION_ENABLED
-      MaximumExecutionFrequency: One_Hour
-    
-#####**********Regional Rules*************      
+      MaximumExecutionFrequency: One_Hour  
   ConfigRuleForEvaluateVpcFlowLogs:
     Type: "AWS::Config::ConfigRule"
     DependsOn: ConfigRecorder
