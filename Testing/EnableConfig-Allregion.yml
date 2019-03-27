@@ -84,20 +84,20 @@ Parameters:
     Description: "'Required-Only If you want to Cloudwatch ruless' Triggered alert to this email address. Verification required and you can opt-out later. Make sure to validate otherwise you won't be able to delete the subscription and have to wait 3 days for automatic deletion."    
   lambdaCWEventrole:
     Type: String
-    Description: Enter Config Service IAM Role Arn which created by Master stack.
-    Default: "arn:aws:iam::366775409521:role/Lambda-CW-Events-SNS"
+    Description: Enter Config Service IAM Role Arn which created by Master stack(Hint-Replace AWS Account No only).
+    Default: "arn:aws:iam::AWS-Account-No:role/Lambda-CW-Events-SNS"
   ConfigS3bucketname:
     Type: String
-    Description: Name of s3 bucket which created by Master stack.
-    Default: "configservice-bucket-366775409521"
+    Description: Name of s3 bucket which created by Master stack(Hint-Replace AWS Account No only).
+    Default: "configservice-bucket-AWS-Account-No"
   ConfigserviceIAMroleARN:
     Type: String
-    Description: Enter Config Service IAM Role Arn which created by Master stack.
-    Default: "arn:aws:iam::366775409521:role/AWSConfigServiceRole"
+    Description: Enter Config Service IAM Role Arn which created by Master stack(Hint-Replace AWS Account No only).
+    Default: "arn:aws:iam::AWS-Account-No:role/AWSConfigServiceRole"
   Lambdaconfigrole:
     Type: String
-    Description: Enter Config Service IAM Role Arn which created by Master stack.
-    Default: "arn:aws:iam::366775409521:role/Lambda-config-rule"
+    Description: Enter Config Service IAM Role Arn which created by Master stack(Hint-Replace AWS Account No only).
+    Default: "arn:aws:iam::AWS-Account-No:role/Lambda-config-rule"
   Configruleconfigure:
     Type: String
     Default: 'No'

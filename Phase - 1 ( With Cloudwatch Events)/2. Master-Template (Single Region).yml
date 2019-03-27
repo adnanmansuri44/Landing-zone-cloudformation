@@ -111,7 +111,7 @@ Resources:
 #---------------------------
 #Create Additional Resources(IAM)
 #---------------------------
-  forceiampolicy: 
+  forceiampolicy:  
     Type: AWS::IAM::ManagedPolicy
     Properties: 
         ManagedPolicyName: "Force_MFA"
@@ -133,7 +133,7 @@ Resources:
               Action: 
                 - "iam:ChangePassword"
                 - "iam:GetUser"
-              Resource: "arn:aws:iam::*:user/${aws:username}"             
+              Resource: "arn:aws:iam::*:user/${aws:username}"
             - 
               Sid: "AllowManageOwnAccessKeys"
               Effect: "Allow"
@@ -151,7 +151,7 @@ Resources:
                 - "iam:ListSigningCertificates"
                 - "iam:UpdateSigningCertificate"
                 - "iam:UploadSigningCertificate"
-              Resource: "arn:aws:iam::*:user/${aws:username}"       
+              Resource: "arn:aws:iam::*:user/${aws:username}"
             - 
               Sid: "AllowManageOwnSSHPublicKeys"
               Effect: "Allow"
@@ -161,7 +161,7 @@ Resources:
                 - "iam:ListSSHPublicKeys"
                 - "iam:UpdateSSHPublicKey"
                 - "iam:UploadSSHPublicKey"
-              Resource: "arn:aws:iam::*:user/${aws:username}"         
+              Resource: "arn:aws:iam::*:user/${aws:username}"
             - 
               Sid: "AllowManageOwnGitCredentials"
               Effect: "Allow"
@@ -171,7 +171,7 @@ Resources:
                 - "iam:ListServiceSpecificCredentials"
                 - "iam:ResetServiceSpecificCredential"
                 - "iam:UpdateServiceSpecificCredential"
-              Resource: "arn:aws:iam::*:user/${aws:username}"       
+              Resource: "arn:aws:iam::*:user/${aws:username}"
             - 
               Sid: "AllowManageOwnVirtualMFADevice"
               Effect: "Allow"
@@ -198,6 +198,7 @@ Resources:
                 - "iam:ListMFADevices"
                 - "iam:ListVirtualMFADevices"
                 - "iam:ResyncMFADevice"
+                - "iam:ChangePassword"
                 - "sts:GetSessionToken"
               Resource: "*"
               Condition: 
@@ -244,7 +245,8 @@ Resources:
                 Effect: "Allow"
                 Action:
                   - sts:AssumeRole
-                Resource: '!Sub arn:aws:iam::${AWS::AccountId}:role/AWSCloudFormationStackSetExecutionRole'                      
+                Resource: 
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/AWSCloudFormationStackSetExecutionRole"                      
 #---------------------------------------
 #CloudTrail & Cloudwatch Configuration
 #---------------------------------------                      

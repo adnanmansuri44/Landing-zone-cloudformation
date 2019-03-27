@@ -244,7 +244,8 @@ Resources:
                 Effect: "Allow"
                 Action:
                   - sts:AssumeRole
-                Resource: '!Sub arn:aws:iam::${AWS::AccountId}:role/AWSCloudFormationStackSetExecutionRole'                      
+                Resource: 
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/AWSCloudFormationStackSetExecutionRole"                      
 #---------------------------------------
 #CloudTrail & Cloudwatch Configuration
 #---------------------------------------                      
