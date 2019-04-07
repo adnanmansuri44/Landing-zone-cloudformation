@@ -8,68 +8,30 @@ Metadata:
       Parameters:
       - PrimaryEmailforAlerts
       - Cloudwatchalertconfigure
-      - lambdaCWEventrole
     - Label:
         default: 'Config-Service'
       Parameters:
-      - ConfigS3bucketname
-      - ConfigserviceIAMroleARN
-      - Lambdaconfigrole
       - Configruleconfigure
-      - Frequency
       - PrimaryEmailforConfig
     - Label:
         default: 'Guardduty-Service'
       Parameters:
       - ConfigureGuardduty
       - PrimaryEmailGuardduty
-      - GuardDutyfindingPublish
     ParameterLabels:
-      ConfigureGuardduty:
-        default: Want to Configure Guardduty and event Notifcation ?
       PrimaryEmailforAlerts:
         default: Primary Email Address for Cloudwatch Alerts
       Cloudwatchalertconfigure:
-        default: Want to Configure Cloudwatch Alerts ?
-      GuardDutyfindingPublish:
-        default: Enter Guardduty Finding Publish Frequency
+        default: Want to Configure Cloudwatch Alerts ? 
+      Configruleconfigure:
+        default: Want to Configure Cloudwatch Alerts ?  
+      PrimaryEmailforConfig:
+        default: Email Address for Config Service Notification        
+      ConfigureGuardduty:
+        default: Want to Configure Guardduty and event Notifcation ?
       PrimaryEmailGuardduty:
         default: Email Address for Guardduty Findings
-      lambdaCWEventrole:
-        default: Enter the IAM role Arn needs for Lambda to Cloudwatch Events via SNS
-      PrimaryEmailforConfig:
-        default: Email Address for Config Service Notification
-      Frequency:
-        default: Config Service Snapshot Delivery Frequency
-      Configruleconfigure:
-        default: Enter Guardduty Finding Publish Frequency
-      Lambdaconfigrole:
-        default: Want to Configure Guardduty and event Notifcation ?
-      ConfigS3bucketname:
-        default: Enter the S3 Bucket for Config Service
-      ConfigserviceIAMroleARN:
-        default: Enter the IAM role Arn For Config Service        
 Parameters:
-  ConfigureGuardduty:
-    Type: String
-    Default: 'No'
-    Description: "Configures AWS Guardduty Service regionally"
-    AllowedValues:
-    - 'Yes'
-    - 'No'
-  PrimaryEmailGuardduty:
-    Type: String
-    AllowedPattern: ".+@.+"
-    Default: 'example@example.com'
-    Description: "'Required-Only If you want to Cloudwatch ruless' Triggered alert to this email address. Verification required and you can opt-out later. Make sure to validate otherwise you won't be able to delete the subscription and have to wait 3 days for automatic deletion."
-  GuardDutyfindingPublish:
-    Type: String
-    Description: "'Optional' Enter the Finding Publish Frequency Value."
-    Default: FIFTEEN_MINUTES
-    AllowedValues:
-      - FIFTEEN_MINUTES
-      - ONE_HOUR
-      - Six_Hours
   Cloudwatchalertconfigure:
     Type: String
     Default: 'No'
@@ -81,23 +43,7 @@ Parameters:
     Type: String
     AllowedPattern: ".+@.+"
     Default: 'example@example.com'
-    Description: "'Required-Only If you want to Cloudwatch ruless' Triggered alert to this email address. Verification required and you can opt-out later. Make sure to validate otherwise you won't be able to delete the subscription and have to wait 3 days for automatic deletion."    
-  lambdaCWEventrole:
-    Type: String
-    Description: Enter Config Service IAM Role Arn which created by Master stack(Hint-Replace AWS Account No only).
-    Default: "arn:aws:iam::AWS-Account-No:role/Lambda-CW-Events-SNS"
-  ConfigS3bucketname:
-    Type: String
-    Description: Name of s3 bucket which created by Master stack(Hint-Replace AWS Account No only).
-    Default: "configservice-bucket-AWS-Account-No"
-  ConfigserviceIAMroleARN:
-    Type: String
-    Description: Enter Config Service IAM Role Arn which created by Master stack(Hint-Replace AWS Account No only).
-    Default: "arn:aws:iam::AWS-Account-No:role/AWSConfigServiceRole"
-  Lambdaconfigrole:
-    Type: String
-    Description: Enter Config Service IAM Role Arn which created by Master stack(Hint-Replace AWS Account No only).
-    Default: "arn:aws:iam::AWS-Account-No:role/Lambda-config-rule"
+    Description: "'Required-Only If you want to CLoudwatch Events'"
   Configruleconfigure:
     Type: String
     Default: 'No'
@@ -105,27 +51,28 @@ Parameters:
     AllowedValues:
     - 'Yes'
     - 'No'
-  Frequency:
-    Type: String
-    Default: Six_Hours
-    Description: The frequency with which AWS Config delivers configuration snapshots.
-    AllowedValues:
-      - One_Hour
-      - Three_Hours
-      - Six_Hours
-      - Twelve_Hours
-      - TwentyFour_Hours
   PrimaryEmailforConfig:
     Type: String
     AllowedPattern: ".+@.+"
     Default: 'example@example.com'
-    Description: "'Optional' Enter the email address you want to notify  stream change and notifications. ' this can cause a high volume of email.'"
+    Description: "'Optional' Enter the email address you want to notify  stream change and notifications. ' this can cause a high volume of email.'"    
+  ConfigureGuardduty:
+    Type: String
+    Default: 'No'
+    Description: "Configures AWS Guardduty Service regionally"
+    AllowedValues:
+    - 'Yes'
+    - 'No'
+  PrimaryEmailGuardduty:
+    Type: String
+    AllowedPattern: ".+@.+"
+    Default: 'example@example.com'
+    Description: "'Required-Only If you want to configure Guardduty Service"
 Conditions:
     Subcription: !Not [!Equals [!Ref PrimaryEmailforConfig, 'example@example.com']]
     Rules: !Not [!Equals [!Ref Configruleconfigure, 'No']]
     Events: !Not [!Equals [!Ref Cloudwatchalertconfigure, 'No']]
     Guardduty: !Not [!Equals [!Ref ConfigureGuardduty, 'No']]
-    
 Resources:
   ConfigTopic:
     Type: AWS::SNS::Topic
@@ -149,6 +96,8 @@ Resources:
                 - config.amazonaws.com
   NotifcationSNS:
     Condition: Subcription
+    DependsOn:
+        - ConfigTopic
     Type: AWS::SNS::Subscription
     Properties:
         Endpoint: !Ref PrimaryEmailforConfig
@@ -158,17 +107,19 @@ Resources:
     Type: AWS::Config::ConfigurationRecorder
     Properties:
       Name: myconfigservice-recorder
-      RoleARN: !Ref ConfigserviceIAMroleARN  
+      RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/AWSConfigServiceRole"
       RecordingGroup:
         AllSupported: true
         IncludeGlobalResourceTypes: true
   ConfigDeliveryChannel:
+    DependsOn:
+        - ConfigTopic
     Type: AWS::Config::DeliveryChannel
     Properties:
       Name: myconfigservice-deliverychannel
       ConfigSnapshotDeliveryProperties:
-        DeliveryFrequency: !Ref Frequency
-      S3BucketName: !Ref ConfigS3bucketname
+        DeliveryFrequency: Six_Hours
+      S3BucketName: !Sub "configservice-bucket-${AWS::AccountId}"
       SnsTopicARN: !Ref ConfigTopic
   ConfigRuleForEvaluateCMKsRotation:
     Type: "AWS::Config::ConfigRule"
@@ -273,7 +224,7 @@ Resources:
       Description: Evaluates whether VPC peered route tables are least access
       Handler: index.lambda_handler
       MemorySize: 1024
-      Role: !Ref Lambdaconfigrole     
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/Lambda-config-rule"
       Runtime: python2.7
       Timeout: 10
   ConfigPermissionToCallVpcPeeringRouteTablesLambda:
@@ -354,7 +305,8 @@ Resources:
       Description: Formats a given CloudWatch Event to be published to an SNS topic
       Handler: index.lambda_handler
       MemorySize: 1024
-      Role: !Ref lambdaCWEventrole
+      #Role: !Ref lambdaCWEventrole
+      Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/Lambda-CW-Events-SNS"
       Runtime: python2.7
       Timeout: 5
   LambdaPermissionForCloudTrailCloudWatchEventRules:
@@ -612,7 +564,7 @@ Resources:
     Type: 'AWS::GuardDuty::Detector'
     Properties:
       Enable: 'true'
-      FindingPublishingFrequency: !Ref GuardDutyfindingPublish
+      FindingPublishingFrequency: FIFTEEN_MINUTES
   EventsRule:
     Condition: Guardduty
     Type: 'AWS::Events::Rule'

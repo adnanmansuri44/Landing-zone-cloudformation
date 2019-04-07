@@ -49,7 +49,7 @@ Parameters:
     MinLength: '0'
     MaxLength: '64'
     AllowedPattern: "^(|[|\\w=,.@-]+)$"
-    ConstraintDescription: "'Optional'The role name must contain only upper and lowercase alphanumeric characters with no spaces. These characters are alllowed: = , . @ -" 
+    ConstraintDescription: "'Optional'The trailname must contain only upper and lowercase alphanumeric characters with no spaces. These characters are alllowed: = , . @ -" 
   CloudWatchLogsRetentionInDays:
     Description: '"Optional" The number of days log events are kept in CloudWatch Logs'
     Type: Number

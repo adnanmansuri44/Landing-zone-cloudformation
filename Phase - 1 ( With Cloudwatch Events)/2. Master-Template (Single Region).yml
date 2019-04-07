@@ -49,7 +49,7 @@ Parameters:
     MinLength: '0'
     MaxLength: '64'
     AllowedPattern: "^(|[|\\w=,.@-]+)$"
-    ConstraintDescription: "'Optional'The role name must contain only upper and lowercase alphanumeric characters with no spaces. These characters are alllowed: = , . @ -" 
+    ConstraintDescription: "'Optional'The trailname must contain only upper and lowercase alphanumeric characters with no spaces. These characters are alllowed: = , . @ -" 
   CloudWatchLogsRetentionInDays:
     Description: '"Optional" The number of days log events are kept in CloudWatch Logs'
     Type: Number
@@ -111,7 +111,7 @@ Resources:
 #---------------------------
 #Create Additional Resources(IAM)
 #---------------------------
-  forceiampolicy:  
+  forceiampolicy: 
     Type: AWS::IAM::ManagedPolicy
     Properties: 
         ManagedPolicyName: "Force_MFA"
@@ -133,7 +133,7 @@ Resources:
               Action: 
                 - "iam:ChangePassword"
                 - "iam:GetUser"
-              Resource: "arn:aws:iam::*:user/${aws:username}"
+              Resource: "arn:aws:iam::*:user/${aws:username}"             
             - 
               Sid: "AllowManageOwnAccessKeys"
               Effect: "Allow"
@@ -151,7 +151,7 @@ Resources:
                 - "iam:ListSigningCertificates"
                 - "iam:UpdateSigningCertificate"
                 - "iam:UploadSigningCertificate"
-              Resource: "arn:aws:iam::*:user/${aws:username}"
+              Resource: "arn:aws:iam::*:user/${aws:username}"       
             - 
               Sid: "AllowManageOwnSSHPublicKeys"
               Effect: "Allow"
@@ -161,7 +161,7 @@ Resources:
                 - "iam:ListSSHPublicKeys"
                 - "iam:UpdateSSHPublicKey"
                 - "iam:UploadSSHPublicKey"
-              Resource: "arn:aws:iam::*:user/${aws:username}"
+              Resource: "arn:aws:iam::*:user/${aws:username}"         
             - 
               Sid: "AllowManageOwnGitCredentials"
               Effect: "Allow"
@@ -171,7 +171,7 @@ Resources:
                 - "iam:ListServiceSpecificCredentials"
                 - "iam:ResetServiceSpecificCredential"
                 - "iam:UpdateServiceSpecificCredential"
-              Resource: "arn:aws:iam::*:user/${aws:username}"
+              Resource: "arn:aws:iam::*:user/${aws:username}"       
             - 
               Sid: "AllowManageOwnVirtualMFADevice"
               Effect: "Allow"
@@ -198,7 +198,6 @@ Resources:
                 - "iam:ListMFADevices"
                 - "iam:ListVirtualMFADevices"
                 - "iam:ResyncMFADevice"
-                - "iam:ChangePassword"
                 - "sts:GetSessionToken"
               Resource: "*"
               Condition: 
