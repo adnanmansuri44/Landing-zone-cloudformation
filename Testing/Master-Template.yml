@@ -1235,6 +1235,7 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AWSCloudTrailReadOnlyAccess
         - arn:aws:iam::aws:policy/IAMReadOnlyAccess
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
       - PolicyName: S3ReadOnly
         PolicyDocument:
