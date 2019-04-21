@@ -124,8 +124,8 @@ Resources:
                 Value: "Prerequistic-setup"
             UserData:
               Fn::Base64:
-                Fn::Sub:
-                  - |                    
+                !Sub |
+                    #!/bin/bash                  
                     yum update -y
                     pip install awscli --upgrade --user
                     yum install git jq -y
