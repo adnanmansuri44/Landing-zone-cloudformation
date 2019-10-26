@@ -104,7 +104,6 @@ Parameters:
     Description: "'Optional' Enter the email address you want to notify  stream change and notifications. ' this can cause a high volume of email.'"
 Conditions:
   SecondarySubcription: !Not [!Equals [!Ref SecondaryEmailCloudwatchalarm, 'example2@example.com']]
-  GuarddutySubcription: !Not [!Equals [!Ref PrimaryEmailGuardduty, 'example@example.com']]
   ConfigSubcription: !Not [!Equals [!Ref PrimaryEmailConfigservice, 'example@example.com']]
 Resources:
 
